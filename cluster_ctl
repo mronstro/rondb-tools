@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Start Python server using:
+# uvicorn app:app --host 0.0.0.0 --port 8000
+
 import json, math, os, re, shutil, subprocess, sys, threading, time
 from pathlib import Path
 from functools import cache
@@ -570,7 +573,7 @@ def do_terraform():
             die("'terraform init' failed.")
         print("Terraform initialized successfully.")
     # terraform apply
-    if subprocess.run(["terraform", "apply"]).returncode != 0:
+    if subprocess.run(["terraform", "apply", "-auto-approve"]).returncode != 0:
         die("'terraform apply' failed.")
 
 # install command
@@ -767,7 +770,7 @@ def do_cleanup():
     state_file = Path("terraform.tfstate")
     if state_file.exists():
         print("Destroying terraform cluster.")
-        if subprocess.run(["terraform", "destroy"]).returncode != 0:
+        if subprocess.run(["terraform", "destroy", "-auto-approve"]).returncode != 0:
             die("'terraform destroy' failed.")
         print("Done destroying terraform cluster.")
     else:
