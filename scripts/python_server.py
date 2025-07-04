@@ -141,11 +141,22 @@ async def create_database(response: Response, background_tasks: BackgroundTasks)
         user_sessions[gui_secret] = {"db": db_name, "locust_port": locust_port}
 
     # 1. Create DB + table
+    db_name_sql = db_name.replace("`", "")
     conn = mysql.connector.connect(**MYSQL_CONFIG)
     cursor = conn.cursor()
-    cursor.execute(f"CREATE DATABASE {db_name}")
+    cursor.execute(f"CREATE DATABASE `{db_name_sql}`")
     cursor.execute(f"USE benchmark")
-    cursor.execute(f"CALL generate_table_data({db_name},'bench_tbl',10, 100000, 1")
+    call_sql = (
+        f"CALL generate_table_data("
+        f"'{db_name_sql}',"         # database name
+        f"'bench_tbl',"             # table name
+        f"10,"                      # column count
+        f"100000,"                  # row count
+        f"1000,"                    # batch size
+        f"1)"                       # column_info
+    )
+    cursor.execute(call_sql)
+    conn.commit()
     cursor.close()
     conn.close()
 
@@ -293,9 +304,10 @@ def cleanup(gui_secret: str, db_name: str, nginx_conf: str, grafana_key_name: st
 
     kill_locust_process(gui_secret)
     # Drop DB
+    db_name_sql = db_name.replace("`", "")
     conn = mysql.connector.connect(**MYSQL_CONFIG)
     cursor = conn.cursor()
-    cursor.execute(f"DROP DATABASE IF EXISTS {db_name}")
+    cursor.execute(f"DROP DATABASE IF EXISTS `{db_name_sql}`")
     conn.commit()
     cursor.close()
     conn.close()
