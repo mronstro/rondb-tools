@@ -15,6 +15,7 @@ class BatchReadUser(HttpUser):
     @events.test_start.add_listener
     def _(environment, **kwargs):
         BatchReadUser.table_size = int(os.getenv("LOCUST_TABLE_SIZE"))
+        BatchReadUser.db_name = str(os.getenv("LOCUST_DATABASE_NAME"))
         BatchReadUser.batch_size = environment.parsed_options.batch_size
         print(f"Starting Locust with table_size={BatchReadUser.table_size}, batch_size={BatchReadUser.batch_size}")
 
@@ -25,7 +26,7 @@ class BatchReadUser(HttpUser):
             id0 = random.randint(1, self.table_size)
             operations.append({
                 "method": "POST",
-                "relative-url": "benchmark/bench_tbl/pk-read",
+                "relative-url": f"{BatchReadUser.db_name}/bench_tbl/pk-read",
                 "body": {
                     "filters": [{"column": "id0", "value": id0}]
                 }

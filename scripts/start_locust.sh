@@ -7,13 +7,14 @@ if [ "$#" -ne 2 ]; then
 fi
 export LOCUST_TABLE_SIZE=$1
 WORKERS=$2
+export LOCUST_DATABASE_NAME="benchmark"
 
 source ${RUN_DIR}/locust/bin/activate
 
 before-start locust
 if [ ${NODEINFO_IDX} -eq 0 ]; then
   # Start master
-  RDRS_HOST=${RDRS_LB:-"http://${RDRS_PRI_1}:5406"}
+  RDRS_HOST=${RDRS_LB:-"http://${RDRS_PRI_1}:4406"}
   (set -x
    taskset -c 0 locust -f ./scripts/locust_batch_read.py --host=${RDRS_HOST} \
            --batch-size=100 --master \
