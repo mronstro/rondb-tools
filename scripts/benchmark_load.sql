@@ -1,11 +1,9 @@
 DELIMITER $$
 
-DROP DATABASE IF EXISTS benchmark;
-CREATE DATABASE benchmark;
-USE benchmark;
 DROP PROCEDURE IF EXISTS generate_table_data$$
 CREATE PROCEDURE generate_table_data(
     IN table_name VARCHAR(255),
+    IN db_name VARCHAR(255),
     IN column_count INT,
     IN row_count INT,
     IN batch_size INT,
@@ -21,7 +19,24 @@ BEGIN
     DECLARE create_table_sql TEXT;
     DECLARE insert_sql TEXT;
     DECLARE row_id INT DEFAULT 1;
-    DECLARE db_name VARCHAR(255) DEFAULT 'benchmark';
+
+    SET drop_db_sql = CONCAT('DROP DATABASE IF EXISTS ', db_name);
+    SET @stmt = drop_db_sql;
+    PREPARE stmt FROM @drop_db_stmt;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+
+    SET create_db_sql = CONCAT('CREATE DATABASE ', db_name);
+    SET @stmt = create_db_sql;
+    PREPARE stmt FROM @stmt;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+
+    SET use_db_sql = CONCAT('USE DATABASE ', db_name);
+    SET @stmt = use_db_sql;
+    PREPARE stmt FROM @use_db_stmt;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
 
     IF table_name IS NULL THEN SET table_name = 'benchmark_tbl'; END IF;
     IF column_count IS NULL THEN SET column_count = 10; END IF;

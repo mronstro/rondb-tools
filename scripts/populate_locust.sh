@@ -33,6 +33,6 @@ if [ "$VALUES" -gt 1000000 ]; then
   echo "This might take a while."
 fi
 (set -x
- $mysql -e "USE benchmark; CALL generate_table_data('bench_tbl', $COLUMNS, $ROWS, $BATCH_SIZE, $COLUMN_INFO)")
+ $mysql -e "USE benchmark; CALL generate_table_data('bench_tbl', 'benchmark', $COLUMNS, $ROWS, $BATCH_SIZE, $COLUMN_INFO)")
 
 $mysql -e "INSERT INTO $SENTINEL_TABLE (params) VALUES ('$PARAM_STRING');"

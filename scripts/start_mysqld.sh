@@ -25,7 +25,7 @@ if [ $NODEINFO_IDX -eq 0 ]; then
     sleep 5
     WAITED=$((WAITED + 1))
   done
-  # Start prometheus myslqd exporter
+  # Start prometheus mysqld exporter
   before-start mysqld_exporter
   export DATA_SOURCE_NAME='root:@tcp(127.0.0.1:3306)/'
   (set -x

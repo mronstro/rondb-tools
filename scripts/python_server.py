@@ -214,7 +214,7 @@ async def run_locust(
     # Start master
     master_proc = subprocess.Popen([
         "locust",
-        "-f", "/app/locustfile.py",
+        "-f", "/home/ubuntu/scripts/locust_batch_read.py",
         "--host", "http://localhost:8000",
         "--web-port", str(locust_port),
         "--master"
@@ -225,7 +225,7 @@ async def run_locust(
     for i in range(worker_count):
         proc = subprocess.Popen([
             "locust",
-            "-f", "/app/locustfile.py",
+            "-f", "/home/ubuntu/scripts/locust_batch_read.py",
             "--host", "http://localhost:8000",
             "--worker",
             "--master-host", "127.0.0.1"
