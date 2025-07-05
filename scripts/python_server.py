@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response, BackgroundTasks
+from fastapi import FastAPI, Response, BackgroundTasks, HTTPException, Cookie, Query
 import re
 import signal
 import psutil
@@ -10,7 +10,7 @@ import mysql.connector
 import requests
 import socket
 from threading import Lock
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -22,7 +22,7 @@ RUN_DIR = Path("/home/ubuntu/config_files")
 MYSQL_HOST="13.12.12.12"
 GRAFANA_HOST="13.12.12.11"
 MYSQL_PASSWORD="password"
-GRAFANA_URL = "http://GRAFANA_HOST:3000"
+GRAFANA_URL = "http://{GRAFANA_HOST}:3000"
 GRAFANA_ADMIN_API_KEY = os.getenv("GRAFANA_ADMIN_API_KEY")  # must be created ahead
 MYSQL_CONFIG = {
     "host": MYSQL_HOST,
@@ -36,11 +36,15 @@ user_sessions = {}  # gui_secret → {"db": ..., "locust_port": ..., "running": 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://GRAFANA_HOST:3000"],  # your frontend origin
+    allow_origins=["http://{GRAFANA_HOST}:3000"],  # your frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/favicon.ico")
+async def favicon():
+    return Response(content="", media_type="image/x-icon")
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -77,7 +81,7 @@ async def index():
 
             async function runLocust() {
                 const count = document.getElementById('workerCount').value;
-                const res = await fetch('/run-locust?worker_count=${count}', {
+                const res = await fetch(`/run-locust?worker_count=${count}`, {
                     method: 'POST',
                     credentials: 'include'
                 });
@@ -218,13 +222,13 @@ async def run_locust(
         conn.close()
 
     env = os.environ.copy()
-    env["LOCUST_DB_NAME"] = db_name
+    env["LOCUST_DATABASE_NAME"] = db_name
 
     # Start master
     master_proc = subprocess.Popen([
         "locust",
         "-f", "/home/ubuntu/scripts/locust_batch_read.py",
-        "--host", "http://localhost:8000",
+        "--host", "http://localhost:8089",
         "--web-port", str(locust_port),
         "--master"
     ], env=env)
@@ -235,7 +239,7 @@ async def run_locust(
         proc = subprocess.Popen([
             "locust",
             "-f", "/home/ubuntu/scripts/locust_batch_read.py",
-            "--host", "http://localhost:8000",
+            "--host", "http://localhost:8089",
             "--worker",
             "--master-host", "127.0.0.1"
         ], env=env)
