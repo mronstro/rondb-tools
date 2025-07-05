@@ -180,7 +180,7 @@ async def create_database(response: Response, background_tasks: BackgroundTasks)
         raise Exception("Failed to create Grafana API key")
 
     # 3. Write NGINX config
-    config = generate_nginx_config(gui_secret, 8089, 3000)  # Locust + Grafana ports
+    config = generate_nginx_config(gui_secret, 8089, 3000, GRAFANA_HOST)  # Locust + Grafana ports
     config_path = RUN_DIR / f"nginx_conf_{gui_secret}.conf"
     config_path.write_text(config)
 
@@ -228,7 +228,7 @@ async def run_locust(
     master_proc = subprocess.Popen([
         "locust",
         "-f", "/home/ubuntu/scripts/locust_batch_read.py",
-        "--host", "http://localhost:8089",
+        "--host", "http://localhost:8000",
         "--web-port", str(locust_port),
         "--master"
     ], env=env)
@@ -239,7 +239,7 @@ async def run_locust(
         proc = subprocess.Popen([
             "locust",
             "-f", "/home/ubuntu/scripts/locust_batch_read.py",
-            "--host", "http://localhost:8089",
+            "--host", "http://localhost:8000",
             "--worker",
             "--master-host", "127.0.0.1"
         ], env=env)
@@ -251,7 +251,7 @@ async def run_locust(
 
     return {"message": f"Distributed Locust UI started at /{X_AUTH}/locust/ with {WORKER_COUNT} workers"}
 
-def generate_nginx_config(secret: str, locust_port: int, grafana_port: int):
+def generate_nginx_config(secret: str, locust_port: int, grafana_port: int, grafana_host: str):
     return f"""
 map $http_upgrade $connection_upgrade {{
     default upgrade;
@@ -289,7 +289,7 @@ server {{
         limit_except GET POST HEAD {{
             deny all;
         }}
-        proxy_pass http://GRAFANA_HOST:{grafana_port};
+        proxy_pass http://{grafana_host}:{grafana_port};
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;

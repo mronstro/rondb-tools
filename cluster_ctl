@@ -377,7 +377,7 @@ def generate_config_files():
       "enabled = true",
       "org_role = Admin",
       "[live]",
-      f"allowed_origins = http://{first('grafana').public_ip}:8080",
+      f"allowed_origins = http://{first('grafana').public_ip}:8080,http://{first('bench').public_ip}:8080",
       )
     w("config_files/grafana/datasources/prometheus.yaml",
       "apiVersion: 1",
