@@ -5,6 +5,7 @@ import psutil
 import uuid
 import subprocess
 import os
+import stat
 import time
 import mysql.connector
 import requests
@@ -18,7 +19,7 @@ app = FastAPI()
 session_lock = Lock()
 
 from pathlib import Path
-RUN_DIR = Path("/home/ubuntu/config_files")
+RUN_DIR = Path("/home/ubuntu/workspace/rondb-run")
 MYSQL_HOST="SET_BEFORE"
 MYSQL_PASSWORD="SET_BEFORE"
 GRAFANA_HOST="SET_BEFORE"
@@ -42,6 +43,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def set_permissions(path):
+    os.chmod(path, 0o755)  # or 0o700 if strict, but nginx needs read+execute
 
 @app.get("/favicon.ico")
 async def favicon():
@@ -119,7 +123,7 @@ def kill_locust_process(secret: str):
 def do_grafana():
     global GRAFANA_ADMIN_API_KEY
     ADMIN_USER = "admin"
-    ADMIN_PASSWORD = f"{GRAFANA_PASSWORD}
+    ADMIN_PASSWORD = f"{GRAFANA_PASSWORD}"
     SERVICE_ACCOUNT_NAME = "bootstrap-admin"
     TTL_SECONDS = 86400  # 1 day
 
@@ -239,11 +243,12 @@ async def create_database(response: Response, background_tasks: BackgroundTasks)
     print("Service account token:", api_key)
 
     # 3. Write NGINX config
+    create_nginx_dirs()
     config = generate_nginx_config(gui_secret, 8089, 3000, GRAFANA_HOST)  # Locust + Grafana ports
     config_path = RUN_DIR / f"nginx_conf_{gui_secret}.conf"
     config_path.write_text(config)
 
-    subprocess.run(["nginx", "-s", "reload"])
+    subprocess.run(["nginx", "-c", str(config_path), "-p", str(RUN_DIR), "-s", "reload"])
 
     # 4. Schedule background cleanup
     background_tasks.add_task(cleanup, gui_secret, db_name, config_path, grafana_key_name)
@@ -310,54 +315,95 @@ async def run_locust(
 
     return {"message": f"Distributed Locust UI started at /{X_AUTH}/locust/ with {WORKER_COUNT} workers"}
 
+def create_nginx_dirs():
+    temp_dirs = [
+        "client_temp", "proxy_temp", "fastcgi_temp", "uwsgi_temp", "scgi_temp"
+    ]
+    nginx_dir = "/home/ubuntu/workspace/rondb-run/nginx"
+    set_permissions(nginx_dir)
+    os.makedirs(nginx_dir, exist_ok=True)
+
+    for d in temp_dirs:
+        full_path = os.path.join(nginx_dir, d)
+        os.makedirs(full_path, exist_ok=True)
+        set_permissions(full_path)
+
+# Also for log files:
+    log_files = ["nginx_error.log", "nginx_access.log"]
+    for f in log_files:
+        full_path = os.path.join(nginx_dir, f)
+        if not os.path.exists(full_path):
+            open(full_path, "a").close()
+        set_permissions(full_path)
+
+    open(os.path.join(nginx_dir, "nginx_error.log"), "a").close()
+    open(os.path.join(nginx_dir, "nginx_access.log"), "a").close()
+
 def generate_nginx_config(secret: str, locust_port: int, grafana_port: int, grafana_host: str):
     return f"""
-map $http_upgrade $connection_upgrade {{
-    default upgrade;
-    ''      close;
-}}
 limit_req_zone $binary_remote_addr zone=perip:10m rate=1r/s;
 
-server {{
-    listen 8080;
+error_log /home/ubuntu/workspace/rondb-run/nginx/nginx_error.log error;
+pid /home/ubuntu/workspace/rondb-run/nginx/nginx.pid;
 
-    location ~ ^/{secret}/locust(/.*)?$ {{
-        limit_req zone=perip burst=2 nodelay;
+events {{
+    worker_connections 4096;
+}}
 
-        if ($http_cookie !~* "X-AUTH={secret}") {{
-            return 403;
-        }}
-        limit_except GET POST HEAD {{
-            deny all;
-        }}
-        proxy_pass http://localhost:{locust_port};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+http {{
+    map $http_upgrade $connection_upgrade {{
+        default upgrade;
+        ""      close;
     }}
 
-    location ~ ^/{secret}/grafana(/.*)?$ {{
-        limit_req zone=perip burst=2 nodelay;
+    client_body_temp_path /home/ubuntu/workspace/rondb-run/nginx/client_temp;
+    proxy_temp_path       /home/ubuntu/workspace/rondb-run/nginx/proxy_temp;
+    fastcgi_temp_path     /home/ubuntu/workspace/rondb-run/nginx/fastcgi_temp;
+    uwsgi_temp_path       /home/ubuntu/workspace/rondb-run/nginx/uwsgi_temp;
+    scgi_temp_path        /home/ubuntu/workspace/rondb-run/nginx/scgi_temp;
 
-        if ($http_cookie !~* "X-AUTH={secret}") {{
-            return 403;
+    server {{
+        access_log /home/ubuntu/workspace/rondb-run/nginx/nginx_access.log;
+        listen 8080;
+
+        location ~ ^/{secret}/locust(/.*)?$ {{
+            limit_req zone=perip burst=2 nodelay;
+
+            if ($http_cookie !~* "X-AUTH={secret}") {{
+                return 403;
+            }}
+            limit_except GET POST HEAD {{
+                deny all;
+            }}
+            proxy_pass http://localhost:{locust_port};
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }}
-        limit_except GET POST HEAD {{
-            deny all;
+
+        location ~ ^/{secret}/grafana(/.*)?$ {{
+            limit_req zone=perip burst=2 nodelay;
+
+            if ($http_cookie !~* "X-AUTH={secret}") {{
+                return 403;
+            }}
+            limit_except GET POST HEAD {{
+                deny all;
+            }}
+            proxy_pass http://{grafana_host}:{grafana_port};
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }}
-        proxy_pass http://{grafana_host}:{grafana_port};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }}
-    location / {{
-        return 404;
+        location / {{
+            return 404;
+        }}
     }}
 }}
 """
