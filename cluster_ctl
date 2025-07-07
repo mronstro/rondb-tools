@@ -1,7 +1,20 @@
 #!/usr/bin/env python3
 
 # Start Python server using:
-# uvicorn app:app --host 0.0.0.0 --port 8000
+# 1. edit GRAFANA_PASSWORD before starting deploy
+# 2. Log into MySQL Server and run create_user_from_bench.sql
+# to create the user that Python server can use
+# 3. Log into bench
+# 4. Edit scripts/python_server.py
+#    MYSQL_HOST = IP address of MySQL Server
+#    MYSQL_PASSWORD = password defined in 2) above
+#    GRAFANA_HOST = IP address of Grafana server
+#    GRAFANA_PASSWORD = Password edited in this file before deploy
+# 5. export RUN_DIR /home/ubuntu/workspace/rondb-run
+# 6. python3 -m venv ${RUN_DIR}/locust
+# 7. source ${RUN_DIR}/locust/bin/activate
+# 8. pip install -q locust psutil fastapi uvicorn mysql-connector-python requests
+# 9. uvicorn python_server:app --host 0.0.0.0 --port 8000
 
 import json, math, os, re, shutil, subprocess, sys, threading, time
 from pathlib import Path
@@ -11,6 +24,7 @@ from functools import cache
 USER = "ubuntu"
 WORKSPACE = f"/home/{USER}/workspace"
 RUN_DIR = f"{WORKSPACE}/rondb-run"
+GRAFANA_PASSWORD="huddinge"
 NUM_CLUSTER_CONN_MYSQLD=1
 NUM_CLUSTER_CONN_RDRS=2
 NUM_CLUSTER_CONN_BENCH=1
@@ -372,10 +386,13 @@ def generate_config_files():
       f"logs = {RUN_DIR}/grafana/logs",
       f"provisioning = {CONFIG_FILES}/grafana",
       "[auth]",
-      "disable_login_form = true",
+      "disable_login_form = false",
       "[auth.anonymous]",
       "enabled = true",
       "org_role = Admin",
+      "[security]",
+      "admin_user = admin",
+      f"admin_password = {GRAFANA_PASSWORD}",
       "[live]",
       f"allowed_origins = http://{first('grafana').public_ip}:8080,http://{first('bench').public_ip}:8080",
       )

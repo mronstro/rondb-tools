@@ -19,14 +19,15 @@ session_lock = Lock()
 
 from pathlib import Path
 RUN_DIR = Path("/home/ubuntu/config_files")
-MYSQL_HOST="13.12.12.12"
-GRAFANA_HOST="13.12.12.11"
-MYSQL_PASSWORD="password"
-GRAFANA_URL = "http://{GRAFANA_HOST}:3000"
-GRAFANA_ADMIN_API_KEY = os.getenv("GRAFANA_ADMIN_API_KEY")  # must be created ahead
+MYSQL_HOST="SET_BEFORE"
+MYSQL_PASSWORD="SET_BEFORE"
+GRAFANA_HOST="SET_BEFORE"
+GRAFANA_PASSWORD="SET_BEFORE"
+GRAFANA_URL = f"http://{GRAFANA_HOST}:3000"
+GRAFANA_ADMIN_API_KEY = None
 MYSQL_CONFIG = {
     "host": MYSQL_HOST,
-    "user": "root",
+    "user": "db_create_user",
     "password": MYSQL_PASSWORD
 }
 WORKER_COUNT=4
@@ -115,6 +116,45 @@ def kill_locust_process(secret: str):
     except Exception as e:
         print(f"Failed to kill Locust processes for {secret}: {e}")
 
+def do_grafana():
+    global GRAFANA_ADMIN_API_KEY
+    ADMIN_USER = "admin"
+    ADMIN_PASSWORD = f"{GRAFANA_PASSWORD}
+    SERVICE_ACCOUNT_NAME = "bootstrap-admin"
+    TTL_SECONDS = 86400  # 1 day
+
+    # Wait for Grafana to start
+    for _ in range(10):
+        try:
+            r = requests.get(f"{GRAFANA_URL}/api/health")
+            if r.ok:
+                break
+        except Exception:
+            time.sleep(2)
+    else:
+        raise Exception("Grafana did not start in time")
+
+    # Step 1: Create the Service Account
+    res = requests.post(
+        f"{GRAFANA_URL}/api/serviceaccounts",
+        auth=(ADMIN_USER, ADMIN_PASSWORD),
+        json={"name": SERVICE_ACCOUNT_NAME, "role": "Admin"}
+    )
+    res.raise_for_status()
+    sa = res.json()
+    sa_id = sa["id"]
+
+    # Step 2: Create a Token for the Service Account
+    res = requests.post(
+        f"{GRAFANA_URL}/api/serviceaccounts/{sa_id}/tokens",
+        auth=(ADMIN_USER, ADMIN_PASSWORD),
+        json={"name": f"{SERVICE_ACCOUNT_NAME}-token", "ttlSeconds": TTL_SECONDS}
+    )
+    res.raise_for_status()
+    api_key = res.json()["key"]
+    GRAFANA_ADMIN_API_KEY=api_key
+    print("✅ GRAFANA_ADMIN_API_KEY =", api_key)
+
 @app.on_event("startup")
 def clean_stale_pid_files():
     print("Checking for stale Locust PID files...")
@@ -129,6 +169,9 @@ def clean_stale_pid_files():
         except Exception as e:
             print(f"Error reading {pid_file}: {e}")
             pid_file.unlink()  # Clean corrupted files
+        do_grafana()
+
+
 
 @app.post("/create-database")
 async def create_database(response: Response, background_tasks: BackgroundTasks):
@@ -167,17 +210,33 @@ async def create_database(response: Response, background_tasks: BackgroundTasks)
     # 2. Create Grafana API key with TTL (10 min)
     grafana_key_name = f"key_{gui_secret}"
     api_key = None
-    res = requests.post(f"{GRAFANA_URL}/api/auth/keys",
-                        headers={"Authorization": f"Bearer {GRAFANA_ADMIN_API_KEY}"},
-                        json={
-                            "name": grafana_key_name,
-                            "role": "Viewer",
-                            "secondsToLive": 600
-                        })
-    if res.status_code == 200:
-        api_key = res.json()["key"]
-    else:
-        raise Exception("Failed to create Grafana API key")
+    ADMIN_USER = "admin"
+    ADMIN_PASSWORD = f"{GRAFANA_PASSWORD}"
+    SERVICE_ACCOUNT_NAME = "temp-viewer"
+    ROLE = "Viewer"  # Can also be Admin, Editor
+    TTL_SECONDS = 600  # 10 minutes
+
+    # Step 1: Create the service account
+    res = requests.post(
+        f"{GRAFANA_URL}/api/serviceaccounts",
+        auth=(ADMIN_USER, ADMIN_PASSWORD),
+        headers={"Content-Type": "application/json"},
+        json={"name": SERVICE_ACCOUNT_NAME, "role": ROLE}
+    )
+    res.raise_for_status()
+    service_account = res.json()
+    service_account_id = service_account["id"]
+
+    # Step 2: Create a token for the service account
+    res = requests.post(
+        f"{GRAFANA_URL}/api/serviceaccounts/{service_account_id}/tokens",
+        auth=(ADMIN_USER, ADMIN_PASSWORD),
+        headers={"Content-Type": "application/json"},
+        json={"name": f"{SERVICE_ACCOUNT_NAME}-token", "ttlSeconds": TTL_SECONDS}
+    )
+    res.raise_for_status()
+    api_key = res.json()["key"]
+    print("Service account token:", api_key)
 
     # 3. Write NGINX config
     config = generate_nginx_config(gui_secret, 8089, 3000, GRAFANA_HOST)  # Locust + Grafana ports
