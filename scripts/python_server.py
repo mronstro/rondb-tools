@@ -256,14 +256,14 @@ async def create_database(response: Response, background_tasks: BackgroundTasks)
     # 3. Write NGINX config
     create_nginx_dirs()
     config = generate_nginx_config(gui_secret, 8089, 3000, GRAFANA_HOST)  # Locust + Grafana ports
-    config_path = CONFIG_DIR / f"nginx_conf_{gui_secret}.conf"
+    config_path = CONFIG_DIR / "nginx" / f"nginx_conf_{gui_secret}.conf"
     config_path.write_text(config)
 
     pid_file = RUN_DIR / "nginx" / "nginx.pid"
     if pid_file.exists():
-        subprocess.run(["nginx", "-c", str(config_path), "-p", str(RUN_DIR), "-s", "reload"])
+        subprocess.run(["sudo", "nginx", "-c", str(config_path), "-p", str(RUN_DIR), "-s", "reload"])
     else:
-        subprocess.run(["nginx", "-c", str(config_path), "-p", str(RUN_DIR)])
+        subprocess.run(["sudo", "nginx", "-c", str(config_path), "-p", str(RUN_DIR)])
 
     # 4. Schedule background cleanup
     background_tasks.add_task(cleanup, gui_secret, db_name, config_path, grafana_key_name)
@@ -277,14 +277,15 @@ async def run_locust(
     x_auth: str = Header(None),
     worker_count: int = Query(0, ge=1, le=WORKER_COUNT)
 ):
-    if not x_auth or not validate_gui_secret(x_auth) or x_auth not in user_sessions:
-        print("X_AUTH: ", x_auth);
-        raise HTTPException(status_code=403, detail="Invalid or expired session")
+    with session_lock:
+        if not x_auth or not validate_gui_secret(x_auth) or x_auth not in user_sessions:
+            print("X_AUTH: ", x_auth);
+            raise HTTPException(status_code=403, detail="Invalid or expired session")
 
-    session = user_sessions[x_auth]
-    db_name = session["db"]
-    locust_port = session["locust_port"]
-    pid_file = RUN_DIR / f"locust_{x_auth}.pid"
+        session = user_sessions[x_auth]
+        db_name = session["db"]
+        locust_port = session["locust_port"]
+        pid_file = RUN_DIR / f"locust_{x_auth}.pid"
 
     # Prevent double-start
     if pid_file.exists():
@@ -391,7 +392,7 @@ http {{
             limit_except GET POST HEAD {{
                 deny all;
             }}
-            proxy_pass http://localhost:{locust_port};
+            proxy_pass http://localhost:{locust_port}$1;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
@@ -409,7 +410,7 @@ http {{
             limit_except GET POST HEAD {{
                 deny all;
             }}
-            proxy_pass http://{grafana_host}:{grafana_port};
+            proxy_pass http://{grafana_host}:{grafana_port}$1;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
