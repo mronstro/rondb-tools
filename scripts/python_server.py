@@ -20,6 +20,7 @@ session_lock = Lock()
 
 from pathlib import Path
 RUN_DIR = Path("/home/ubuntu/workspace/rondb-run")
+CONFIG_DIR = Path("/home/ubuntu/config_files")
 MYSQL_HOST="SET_BEFORE"
 MYSQL_PASSWORD="SET_BEFORE"
 GRAFANA_HOST="SET_BEFORE"
@@ -216,7 +217,7 @@ async def create_database(response: Response, background_tasks: BackgroundTasks)
     api_key = None
     ADMIN_USER = "admin"
     ADMIN_PASSWORD = f"{GRAFANA_PASSWORD}"
-    SERVICE_ACCOUNT_NAME = "temp-viewer"
+    SERVICE_ACCOUNT_NAME = f"temp_viewer_{gui_secret}"
     ROLE = "Viewer"  # Can also be Admin, Editor
     TTL_SECONDS = 600  # 10 minutes
 
@@ -245,10 +246,14 @@ async def create_database(response: Response, background_tasks: BackgroundTasks)
     # 3. Write NGINX config
     create_nginx_dirs()
     config = generate_nginx_config(gui_secret, 8089, 3000, GRAFANA_HOST)  # Locust + Grafana ports
-    config_path = RUN_DIR / f"nginx_conf_{gui_secret}.conf"
+    config_path = CONFIG_DIR / f"nginx_conf_{gui_secret}.conf"
     config_path.write_text(config)
 
-    subprocess.run(["nginx", "-c", str(config_path), "-p", str(RUN_DIR), "-s", "reload"])
+    pid_file = RUN_DIR / "nginx" / "nginx.pid"
+    if pid_file.exists():
+        subprocess.run(["nginx", "-c", str(config_path), "-p", str(RUN_DIR), "-s", "reload"])
+    else:
+        subprocess.run(["nginx", "-c", str(config_path), "-p", str(RUN_DIR)])
 
     # 4. Schedule background cleanup
     background_tasks.add_task(cleanup, gui_secret, db_name, config_path, grafana_key_name)
