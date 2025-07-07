@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response, BackgroundTasks, HTTPException, Cookie, Query
+from fastapi import FastAPI, Response, BackgroundTasks, HTTPException, Cookie, Query, Header
 import re
 import signal
 import psutil
@@ -77,19 +77,29 @@ async def index():
         <div id="locust-status"></div>
 
         <script>
+            let guiSecret = null;  // store gui_secret globally
             async function createDatabase() {
                 const res = await fetch('/create-database', {
-                    method: 'POST'
+                    method: 'POST',
+                   credentials: 'include', // 👈 This is required to receive/store cookies
                 });
                 const data = await res.json();
+                guiSecret = data.gui_secret;  // store gui_secret here
                 document.getElementById('db-status').innerText = JSON.stringify(data, null, 2);
             }
 
             async function runLocust() {
+                if (!guiSecret) {
+                    alert('Please create the database first to get the gui_secret!');
+                    return;
+                }
                 const count = document.getElementById('workerCount').value;
                 const res = await fetch(`/run-locust?worker_count=${count}`, {
                     method: 'POST',
-                    credentials: 'include'
+                    credentials: 'include',
+                    headers: {
+                        'X-AUTH': guiSecret   // add the gui_secret as header here
+                    }
                 });
                 const data = await res.json();
                 document.getElementById('locust-status').innerText = JSON.stringify(data, null, 2);
@@ -259,25 +269,26 @@ async def create_database(response: Response, background_tasks: BackgroundTasks)
     background_tasks.add_task(cleanup, gui_secret, db_name, config_path, grafana_key_name)
 
     # 5. Send access cookie
-    response.set_cookie("X-AUTH", gui_secret, max_age=600, httponly=True, secure=True)
+    response.set_cookie("X-AUTH", gui_secret, max_age=600, httponly=True, secure=False)
     return {"message": "Database created", "gui_secret": gui_secret, "grafana_api_key": api_key}
 
 @app.post("/run-locust")
 async def run_locust(
-    X_AUTH: str = Cookie(None),
+    x_auth: str = Header(None),
     worker_count: int = Query(0, ge=1, le=WORKER_COUNT)
 ):
-    if not X_AUTH or not validate_gui_secret(X_AUTH) or X_AUTH not in user_sessions:
+    if not x_auth or not validate_gui_secret(x_auth) or x_auth not in user_sessions:
+        print("X_AUTH: ", x_auth);
         raise HTTPException(status_code=403, detail="Invalid or expired session")
 
-    session = user_sessions[X_AUTH]
+    session = user_sessions[x_auth]
     db_name = session["db"]
     locust_port = session["locust_port"]
-    pid_file = RUN_DIR / f"locust_{X_AUTH}.pid"
+    pid_file = RUN_DIR / f"locust_{x_auth}.pid"
 
     # Prevent double-start
     if pid_file.exists():
-        return {"message": f"Locust already running on /{X_AUTH}/locust/"}
+        return {"message": f"Locust already running on /{x_auth}/locust/"}
 
     # Check if already running (optional: track PID)
     try:
@@ -318,7 +329,7 @@ async def run_locust(
     all_pids = [master_proc.pid] + [p.pid for p in worker_procs]
     pid_file.write_text("\n".join(map(str, all_pids)))
 
-    return {"message": f"Distributed Locust UI started at /{X_AUTH}/locust/ with {WORKER_COUNT} workers"}
+    return {"message": f"Distributed Locust UI started at /{x_auth}/locust/ with {WORKER_COUNT} workers"}
 
 def create_nginx_dirs():
     temp_dirs = [
@@ -346,7 +357,6 @@ def create_nginx_dirs():
 
 def generate_nginx_config(secret: str, locust_port: int, grafana_port: int, grafana_host: str):
     return f"""
-limit_req_zone $binary_remote_addr zone=perip:10m rate=1r/s;
 
 error_log /home/ubuntu/workspace/rondb-run/nginx/nginx_error.log error;
 pid /home/ubuntu/workspace/rondb-run/nginx/nginx.pid;
@@ -356,6 +366,7 @@ events {{
 }}
 
 http {{
+    limit_req_zone $binary_remote_addr zone=perip:10m rate=1r/s;
     map $http_upgrade $connection_upgrade {{
         default upgrade;
         ""      close;

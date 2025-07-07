@@ -393,6 +393,9 @@ def generate_config_files():
       "[security]",
       "admin_user = admin",
       f"admin_password = {GRAFANA_PASSWORD}",
+      "[server]",
+      "root_url = http://{first('bench').public_ip}:8080/grafana",
+      "serve_from_sub_path = true",
       "[live]",
       f"allowed_origins = http://{first('grafana').public_ip}:8080,http://{first('bench').public_ip}:8080",
       )
