@@ -368,8 +368,12 @@ def create_nginx_dirs():
         "client_temp", "proxy_temp", "fastcgi_temp", "uwsgi_temp", "scgi_temp"
     ]
     nginx_dir = "/home/ubuntu/workspace/rondb-run/nginx"
-    set_permissions(nginx_dir)
     os.makedirs(nginx_dir, exist_ok=True)
+    set_permissions(nginx_dir)
+
+    nginx_config_dir = "/home/ubuntu/config_files/nginx"
+    os.makedirs(nginx_config_dir, exist_ok=True)
+    set_permissions(nginx_config_dir)
 
     for d in temp_dirs:
         full_path = os.path.join(nginx_dir, d)
@@ -441,7 +445,7 @@ http {{
             limit_except GET POST HEAD {{
                 deny all;
             }}
-            proxy_pass http://{grafana_host}:{grafana_port}$1;
+            proxy_pass http://{grafana_host}:{grafana_port};
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
