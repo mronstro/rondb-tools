@@ -68,6 +68,7 @@ async def index():
     <body>
         <h2>Start Test Environment</h2>
         <button onclick="createDatabase()">Create Database</button>
+        <div id="db-spinner" style="display:none; margin: 1em 0; color: #555;">Creating database...</div>
         <div id="db-status"></div>
 
         <h2>Run Locust</h2>
@@ -76,16 +77,28 @@ async def index():
         <button onclick="runLocust()">Run Locust</button>
         <div id="locust-status"></div>
 
+        <h2>Open Monitoring Interfaces</h2>
+        <button onclick="openGrafana()">Open Grafana</button>
+        <button onclick="openLocustUI()">Open Locust UI</button>
+
         <script>
             let guiSecret = null;  // store gui_secret globally
             async function createDatabase() {
-                const res = await fetch('/create-database', {
-                    method: 'POST',
-                   credentials: 'include', // 👈 This is required to receive/store cookies
-                });
-                const data = await res.json();
-                guiSecret = data.gui_secret;  // store gui_secret here
-                document.getElementById('db-status').innerText = JSON.stringify(data, null, 2);
+                const spinner = document.getElementById('db-spinner');
+                spinner.style.display = 'block'; // show spinner
+                try {
+                    const res = await fetch('/create-database', {
+                        method: 'POST',
+                        credentials: 'include', // 👈 This is required to receive/store cookies
+                    });
+                    const data = await res.json();
+                    guiSecret = data.gui_secret;  // store gui_secret here
+                    document.getElementById('db-status').innerText = JSON.stringify(data, null, 2);
+                } catch (err) {
+                    document.getElementById('db-status').innerText = 'Error creating database.';
+                } finally {
+                    spinner.style.display = 'none'; // hide spinner
+                }
             }
 
             async function runLocust() {
@@ -103,6 +116,24 @@ async def index():
                 });
                 const data = await res.json();
                 document.getElementById('locust-status').innerText = JSON.stringify(data, null, 2);
+            }
+
+            function openGrafana() {
+                if (!guiSecret) {
+                    alert('Please create the database first to get the gui_secret!');
+                    return;
+                }
+                const url = `http://${location.hostname}:8080/${guiSecret}/grafana`;
+                window.open(url, '_blank');  // opens in new tab
+            }
+
+            function openLocustUI() {
+                if (!guiSecret) {
+                    alert('Please create the database first to get the gui_secret!');
+                    return;
+                }
+                const url = `http://${location.hostname}:8080/${guiSecret}/locust`;
+                window.open(url, '_blank');
             }
         </script>
     </body>
