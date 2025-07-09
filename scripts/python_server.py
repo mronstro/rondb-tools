@@ -290,11 +290,11 @@ async def create_database(response: Response, background_tasks: BackgroundTasks)
     config_path = CONFIG_DIR / "nginx" / f"nginx_conf_{gui_secret}.conf"
     config_path.write_text(config)
 
-    pid_file = / "var" / "nginx" / "nginx.pid"
+    pid_file = RUN_DIR / f"nginx/nginx.pid"
     if pid_file.exists():
-        subprocess.run(["sudo", "nginx", "-c", str(config_path), "-p", str(RUN_DIR), "-s", "reload"])
+        subprocess.run(["sudo", "nginx", "-s", "reload"])
     else:
-        subprocess.run(["sudo", "nginx", "-c", str(config_path), "-p", str(RUN_DIR)])
+        subprocess.run(["sudo", "nginx"])
 
     # 4. Schedule background cleanup
     background_tasks.add_task(cleanup, gui_secret, db_name, config_path, grafana_key_name)
@@ -459,7 +459,7 @@ def cleanup(gui_secret: str, db_name: str, nginx_conf: str, grafana_key_name: st
 
     # Remove NGINX config + reload
     os.remove(nginx_conf)
-    subprocess.run(["nginx", "-s", "reload"])
+    subprocess.run(["sudo", "nginx", "-s", "reload"])
 
     # Safely remove session from user_sessions
     with session_lock:
