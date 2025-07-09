@@ -68,7 +68,7 @@ case "$NODEINFO_ROLE" in
     ;;
   grafana)
     rm -rf ${RUN_DIR}
-    mkdir -p ${RUN_DIR}/grafana ${RUN_DIR}/nginx
+    mkdir -p ${RUN_DIR}/grafana
     sudo systemctl mask nginx
     (set -x
      sudo DEBIAN_FRONTEND=noninteractive \
@@ -85,16 +85,35 @@ case "$NODEINFO_ROLE" in
     rm -rf ${RUN_DIR}
     # Install python3 and python3-venv, needed for locust.
     # Install redis-tools, needed for valkey.
-    # Install nginx, needed for automatic authentication.
+    # Install nginx dependencies
     sudo systemctl mask nginx
     sudo DEBIAN_FRONTEND=noninteractive \
-         apt-get install -y python3 python3-venv redis-tools nginx
-    # Install locust
-    mkdir -p ${RUN_DIR}/locust ${RUN_DIR}/nginx
-    python3 -m venv ${RUN_DIR}/locust
-    source ${RUN_DIR}/locust/bin/activate
+         apt-get install -y python3 python3-venv redis-tools \
+         curl gnupg2 ca-certificates lsb-release ubuntu-keyring
+    # Install nginx. We need a newer version than Ubuntu provides in order to
+    # support the `-e` option.
+    if ! which nginx; then
+      curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor |
+        sudo tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+      echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" |
+        sudo tee /etc/apt/sources.list.d/nginx.list
+      echo -e "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n" |
+        sudo tee /etc/apt/preferences.d/99nginx
+      sudo apt update -yq
+      sudo DEBIAN_FRONTEND=noninteractive \
+        apt-get install -yq nginx
+    fi
+    # Install python deps for locust and demo UI
+    mkdir -p ${RUN_DIR}/locust ${RUN_DIR}/nginx ${RUN_DIR}/demo
+    python3 -m venv ${RUN_DIR}/locust-venv
+    source ${RUN_DIR}/locust-venv/bin/activate
     pip install -q --upgrade pip
-    pip install -q locust psutil fastapi uvicorn mysql-connector-python requests
-
+    pip install -q locust
+    deactivate
+    python3 -m venv ${RUN_DIR}/demo-venv
+    source ${RUN_DIR}/demo-venv/bin/activate
+    pip install -q --upgrade pip
+    pip install -q psutil fastapi uvicorn mysql-connector-python requests
+    deactivate
     ;;
 esac

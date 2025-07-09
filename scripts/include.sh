@@ -7,7 +7,7 @@ source ./config_files/nodeinfo
 bin="${WORKSPACE}/rondb/bin"
 mysql="$bin/mysql -uroot"
 
-possible_procs="ndb_mgmd ndbmtd mysqld mysqld_exporter rdrs2 prometheus grafana grafana-server sysbench locust valkey nginx"
+possible_procs="ndb_mgmd ndbmtd mysqld mysqld_exporter rdrs2 prometheus grafana grafana-server sysbench locust valkey nginx uvicorn"
 
 is-running() {
   # linux process names are max 15 characters.
@@ -25,6 +25,9 @@ after-start() {
   sleep 2
   if ! is-running "$1"; then
     echo "Failed to start $1"
+    if [ -n "$2" ]; then
+      cat "$2"
+    fi
     exit 1
   fi
 }

@@ -6,7 +6,7 @@ before-start mysqld
 (set -x
  $bin/mysqld --defaults-file=./config_files/my.cnf --initialize-insecure
  $bin/mysqld --defaults-file=./config_files/my.cnf &)
-after-start mysqld
+after-start mysqld ""
 
 # Operations to run on the first node only
 if [ $NODEINFO_IDX -eq 0 ]; then
@@ -31,7 +31,7 @@ if [ $NODEINFO_IDX -eq 0 ]; then
   (set -x
    ${WORKSPACE}/mysqld_exporter/mysqld_exporter --no-collect.slave_status \
                > "${RUN_DIR}/mysqld_exporter.log" 2>&1 &)
-  after-start mysqld_exporter
+  after-start mysqld_exporter ""
   # Init database
   echo "Creating the procedure for creating rdrs benchmark table" \
        "on MySQL ${MYSQLD_PUB_1}"
@@ -39,4 +39,7 @@ if [ $NODEINFO_IDX -eq 0 ]; then
   echo "Creating the rondis tables on MySQL ${MYSQLD_PUB_1}"
   $mysql -e "source ./scripts/create_rondis_tables.sql"
   $mysql -e "use benchmark;call CreateRondisTables(2)"
+  $mysql -e "DROP USER IF EXISTS 'db_create_user'@'$BENCH_PRI_1';"
+  $mysql -e "CREATE USER 'db_create_user'@'$BENCH_PRI_1' IDENTIFIED BY '$DEMO_MYSQL_PW';"
+  $mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'db_create_user'@'$BENCH_PRI_1';"
 fi
