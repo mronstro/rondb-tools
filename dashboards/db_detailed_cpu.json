@@ -121,7 +121,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} Execute percentage",
+          "legendFormat": "{{ threadName }} Execute",
           "refId": "A"
         },
         {
@@ -133,7 +133,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} Sleep percentage",
+          "legendFormat": "{{ threadName }} Sleep",
           "refId": "B"
         },
         {
@@ -145,7 +145,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} Send percentage",
+          "legendFormat": "{{ threadName }} Send",
           "refId": "C"
         },
         {
@@ -157,7 +157,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} Execute percentage",
+          "legendFormat": "{{ threadName }} Execute",
           "refId": "D"
         }
       ],
@@ -251,7 +251,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute",
           "refId": "A"
         },
         {
@@ -263,7 +263,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep",
           "refId": "B"
         },
         {
@@ -275,7 +275,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Send Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Send",
           "refId": "C"
         },
         {
@@ -287,7 +287,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin",
           "refId": "D"
         }
       ],
@@ -377,11 +377,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\",threadName=\"recv\"})",
+          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\",threadName=~\"recv|recv_main_rep|recv_tc|recv_ldm_tc|recv_ldm_tc_main|recv_ldm_tc_rep|recv_ldm_tc_main_rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute",
           "refId": "A"
         },
         {
@@ -389,11 +389,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=\"recv\"})",
+          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=~\"recv|recv_main_rep|recv_tc|recv_ldm_tc|recv_ldm_tc_main|recv_ldm_tc_rep|recv_ldm_tc_main_rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep",
           "refId": "B"
         },
         {
@@ -401,11 +401,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=\"recv\"})",
+          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=~\"recv|recv_main_rep|recv_tc|recv_ldm_tc|recv_ldm_tc_main|recv_ldm_tc_rep|recv_ldm_tc_main_rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Send Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Send",
           "refId": "C"
         },
         {
@@ -413,11 +413,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\",threadName=\"recv\"})",
+          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\",threadName=~\"recv|recv_main_rep|recv_tc|recv_ldm_tc|recv_ldm_tc_main|recv_ldm_tc_rep|recv_ldm_tc_main_rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin",
           "refId": "D"
         }
       ],
@@ -511,7 +511,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute",
           "refId": "A"
         },
         {
@@ -523,7 +523,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep",
           "refId": "B"
         },
         {
@@ -535,7 +535,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Send Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Send",
           "refId": "C"
         },
         {
@@ -547,7 +547,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin",
           "refId": "D"
         }
       ],
@@ -641,7 +641,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute",
           "refId": "A"
         },
         {
@@ -653,7 +653,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep",
           "refId": "B"
         },
         {
@@ -665,7 +665,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Send Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Send",
           "refId": "C"
         },
         {
@@ -677,7 +677,7 @@
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin",
           "refId": "D"
         }
       ],
@@ -767,11 +767,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\",threadName=\"main\"})",
+          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\",threadName=~\"main|main_rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Execute",
           "refId": "A"
         },
         {
@@ -779,11 +779,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=\"amin\"})",
+          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=~\"main|main_rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Sleep",
           "refId": "B"
         },
         {
@@ -791,11 +791,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=\"main\"})",
+          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=~\"main|main_rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Send Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Send",
           "refId": "C"
         },
         {
@@ -803,11 +803,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\",threadName=\"main\"})",
+          "expr": "sum by (threadName,threadNO)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\",threadName=~\"main|main_rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin Percentage",
+          "legendFormat": "{{ threadName }}[{{threadNO}}] Spin",
           "refId": "D"
         }
       ],
