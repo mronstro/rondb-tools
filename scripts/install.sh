@@ -47,10 +47,10 @@ case "$NODEINFO_ROLE" in
     (set -x
      sudo apt-get install -yq golang)
     cd ${WORKSPACE}
-    git clone https://github.com/logicalclocks/mysqld_exporter.git
+    git clone https://github.com/mronstro/mysqld_exporter.git
     cd mysqld_exporter
     (set -x
-     git checkout -q origin/ndb)
+     git checkout -q origin/RONDB-926)
     go build
     ;;
   rdrs)
