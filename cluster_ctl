@@ -43,15 +43,19 @@ config_vars_not_in_tfvars = [
     "glibc_version",
 ]
 
-# Node types, number of NDB NodeIds, and color
+trueColor = not ('TERM_PROGRAM' in os.environ and
+                 'Apple_Terminal' in os.environ['TERM_PROGRAM'])
+node_color = lambda r, g, b, i: "38;5;16;48;" + (
+    f"2;{r};{g};{b}" if trueColor else f"5;{i}")
 node_types = [
-    ("ndb_mgmd",   1,                       "48;2;21;149;230;38;5;16"),
-    ("ndbmtd",     1,                       "48;2;3;193;148;38;5;16"),
-    ("mysqld",     NUM_CLUSTER_CONN_MYSQLD, "48;2;255;227;71;38;5;16"),
-    ("rdrs",       NUM_CLUSTER_CONN_RDRS,   "48;2;233;125;103;38;5;16"),
-    ("prometheus", 0,                       "48;2;178;141;248;38;5;16"),
-    ("grafana",    0,                       "48;2;239;161;248;38;5;16"),
-    ("bench",      NUM_CLUSTER_CONN_BENCH,  "48;2;255;178;75;38;5;16"),
+    #Node type,    number of NDB NodeIds,               R    G    B   256-color
+    ("ndb_mgmd",   1,                       node_color( 21, 149, 230,  32)),
+    ("ndbmtd",     1,                       node_color(  3, 193, 148,  42)),
+    ("mysqld",     NUM_CLUSTER_CONN_MYSQLD, node_color(255, 227,  71, 227)),
+    ("rdrs",       NUM_CLUSTER_CONN_RDRS,   node_color(233, 125, 103, 167)),
+    ("prometheus", 0,                       node_color(178, 141, 248, 141)),
+    ("grafana",    0,                       node_color(239, 161, 248, 212)),
+    ("bench",      NUM_CLUSTER_CONN_BENCH,  node_color(255, 178,  75, 215)),
 ]
 import sys
 stdout_is_tty=sys.stdout.isatty()
