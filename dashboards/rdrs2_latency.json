@@ -148,6 +148,46 @@
       },
       "id": 7,
       "pluginVersion": "12.0.0"
+    },
+    {
+      "type": "timeseries",
+      "title": "Key Lookups per second",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(keyRequestCounter_total{api_type=\"NDB\", end_point=\"key\"}[30s])",
+          "legendFormat": "{{api_type}} {{end_point}}",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16 
+      },
+      "id": 1,
+      "pluginVersion": "12.0.0"
     }
   ],
   "refresh": "5s",
