@@ -188,6 +188,46 @@
       },
       "id": 1,
       "pluginVersion": "12.0.0"
+    },
+    {
+      "type": "timeseries",
+      "title": "RDRS2 requests per second",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(rdrs_endpoints_response_status_count{api_type=\"REST\"}[30s])",
+          "legendFormat": "{{ endpoint }}",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24 
+      },
+      "id": 2,
+      "pluginVersion": "12.0.0"
     }
   ],
   "refresh": "5s",
