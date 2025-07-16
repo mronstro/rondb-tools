@@ -171,6 +171,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "type": "timeseries",
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
@@ -202,7 +203,13 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "alertThreshold": true
+        "alertThreshold": true,
+        "legend": {
+        "displayMode": "list",
+        "placement": "bottom"
+      },
+      "tooltip": {
+        "mode": "single"
       },
       "percentage": false,
       "pluginVersion": "9.0.2",
@@ -229,7 +236,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Median latency per endpoint",
+      "title": "99% latency per endpoint",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -256,7 +263,48 @@
       "yaxis": {
         "align": false
       }
+    },
+    {
+      "type": "timeseries",
+      "title": "P99 Latency (ms)",
+      "fieldConfig": {
+        "defaults": {
+        "unit": "ms",
+        "decimals": 3
+      },
+      "overrides": []
+    },
+      "targets": [
+        {
+          "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.99, sum by (endpoint,le)(rate(http_request_duration_seconds_bucket{method=\"POST\"}[30s]))) * 1000",
+          "format": "time_series",
+          "legendFormat": "{{ endpoint }}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 7,
+      "pluginVersion": "12.0.0"
     }
+
   ],
   "refresh": "5s",
   "schemaVersion": 36,
