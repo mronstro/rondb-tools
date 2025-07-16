@@ -79,8 +79,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "decimals": 3,
-          "displayName": "Median latency"
+          "decimals": 3
         },
         "overrides": []
       },
@@ -125,7 +124,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "histogram_quantile(0.5, sum by (endpoint,le)(rate(http_request_duration_seconds_bucket{method=\"POST\"}[30s])))",
+          "expr": "histogram_quantile(0.5, sum by (endpoint,le)(rate(http_request_duration_seconds_bucket{method=\"POST\"}[30s]))) * 1000",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
