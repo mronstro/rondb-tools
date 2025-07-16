@@ -205,7 +205,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "rate(rdrs_endpoints_response_status_count{api_type=\"REST\"}[30s])",
+          "expr": "sum by (end_point) (rate(rdrs_endpoints_response_status_count{api_type=\"REST\",status=\"200\"}[30s]))",
           "legendFormat": "{{ endpoint }}",
           "refId": "A",
           "format": "time_series"
