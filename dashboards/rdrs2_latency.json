@@ -125,7 +125,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "histogram_quantile(0.5, sum by (le)(rate(http_request_duration_seconds_bucket{method="POST"}[30s])))",
+          "expr": "histogram_quantile(0.5, sum by (endpoint,le)(rate(http_request_duration_seconds_bucket{method=\"POST\"}[30s])))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
