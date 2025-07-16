@@ -84,7 +84,7 @@
           "type": "prometheus",
           "uid": "PBFA97CFB590B2093"
           },
-          "expr": "histogram_quantile(0.99, sum by (endpoint,le)(rate(http_request_duration_seconds_bucket{method=\"POST\"}[30s]))) * 1000",
+          "expr": "histogram_quantile(0.5, sum by (endpoint,le)(rate(http_request_duration_seconds_bucket{method=\"POST\"}[30s]))) * 1000",
           "format": "time_series",
           "legendFormat": "{{ endpoint }}",
           "refId": "A"
@@ -165,8 +165,8 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "rate(keyRequestCounter_total{api_type=\"NDB\", end_point=\"key\"}[30s])",
-          "legendFormat": "{{api_type}} {{end_point}}",
+          "expr": "rate(rdrs_endpoints_response_status_count{api_type=\"NDB\", end_point=\"key\"}[30s])",
+          "legendFormat": "Key req/sec",
           "refId": "A",
           "format": "time_series"
         }
