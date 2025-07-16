@@ -163,45 +163,105 @@
       }
     },
     {
-      "type": "timeseries",
-      "title": "P99 Latency (ms)",
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "decimals": 3,
-          "min": 0
+          "decimals": 3
         },
         "overrides": []
       },
-      "targets": [
-        {
-          "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "histogram_quantile(0.99, sum by (endpoint,le)(rate(http_request_duration_seconds_bucket{method=\"POST\"}[30s]))) * 1000",
-          "format": "time_series",
-          "legendFormat": "{{ endpoint }}",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
+      "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
         "y": 8
       },
+      "hiddenSeries": false,
       "id": 7,
-      "pluginVersion": "12.0.0"
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true,
+        "legend": {
+        "displayMode": "list",
+        "placement": "bottom"
+      },
+      "tooltip": {
+        "mode": "single"
+      },
+      "percentage": false,
+      "pluginVersion": "9.0.2",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.99, sum by (endpoint,le)(rate(http_request_duration_seconds_bucket{method=\"POST\"}[30s]))) * 1000",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ endpoint }}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "99% latency per endpoint",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
     }
   ],
   "refresh": "5s",
@@ -268,8 +328,8 @@
     ]
   },
   "timezone": "",
-  "title": "RDRS2 Monitoring",
-  "uid": "rdrs2_mon",
+  "title": "RDRS2 Monitoring tmp",
+  "uid": "rdrs2_mon_tmp",
   "version": 2,
   "weekStart": ""
 }
