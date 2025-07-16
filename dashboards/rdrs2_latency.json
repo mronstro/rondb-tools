@@ -269,11 +269,12 @@
       "title": "P99 Latency (ms)",
       "fieldConfig": {
         "defaults": {
-        "unit": "ms",
-        "decimals": 3
+          "unit": "ms",
+          "decimals": 3,
+          "min": 0
+        },
+        "overrides": []
       },
-      "overrides": []
-    },
       "targets": [
         {
           "datasource": {
@@ -304,7 +305,6 @@
       "id": 7,
       "pluginVersion": "12.0.0"
     }
-
   ],
   "refresh": "5s",
   "schemaVersion": 36,
