@@ -543,6 +543,20 @@ def update_status(node):
     proc = subprocess.run(ssh(node, 'bash ~/scripts/status.sh'),
                           capture_output=True, text=True)
     node.status = proc.stdout.strip() if proc.returncode == 0 else None
+def connectivity_check(node):
+    global failed
+    attempts = 12
+    wait_time = 5
+    for attempt in range(attempts):
+        proc = subprocess.run(ssh(node, 'echo OK'),
+                              capture_output=True, text=True)
+        if proc.returncode == 0 and proc.stdout.strip() == 'OK':
+            return
+        if attempt < attempts - 1:
+            print(f"{node.tui_name()} Connectivity check {attempt + 1} {red('failed')}, waiting {wait_time} seconds before trying againg...")
+            time.sleep(wait_time)
+    print(f"{node.tui_name()} Connectivity check {red('failed')} {attempts} times, giving up.")
+    failed = True
 # Allow up to 10 concurrent rsync processes to upload config files to nodes
 upload_lock = threading.Semaphore(10)
 # Allow up to 2 nodes to download from repo.hops.works concurrently
@@ -552,10 +566,12 @@ UNLOCK_REPO = 2
 LOCK_UPLOAD = 3
 UNLOCK_UPLOAD = 4
 UPDATE_STATUS = 5
+CONNECTIVITY_CHECK = 6
 def run_for_one_node(node, cmdfun):
     cmds = cmdfun(node)
     for cmd in cmds:
-        if cmd == LOCK_UPLOAD: upload_lock.acquire()
+        if cmd == CONNECTIVITY_CHECK: connectivity_check(node)
+        elif cmd == LOCK_UPLOAD: upload_lock.acquire()
         elif cmd == UNLOCK_UPLOAD: upload_lock.release()
         elif cmd == LOCK_REPO: repo_lock.acquire()
         elif cmd == UNLOCK_REPO: repo_lock.release()
@@ -629,12 +645,18 @@ def do_install(for_nodes):
     for node in for_nodes:
         print(f"{node.tui_name()} -> {node.private_ip} / {node.public_ip}")
     print("--------------------------------------------------")
-    print("Press Ctrl+C within 3 seconds to abort.")
-    time.sleep(3)
     print("Installing...")
     run_for_all(for_nodes, lambda node: [
-        ssh(node, "sudo apt-get update -y"),
-        ssh(node, "sudo apt-get install -y rsync libncurses6"),
+        CONNECTIVITY_CHECK,
+        ssh(node,
+            "if [ -f /tmp/rsync-installed ]; then "
+            "  :; "
+            "else "
+            "  sudo DEBIAN_FRONTEND=noninteractive apt-get update -yq && "
+            "  sudo DEBIAN_FRONTEND=noninteractive "
+            "    apt-get install -yq rsync libncurses6; "
+            "fi && "
+            "touch /tmp/rsync-installed"),
         LOCK_UPLOAD,
         rsync("./scripts", node),
         rsync("./config_files", node),
@@ -656,11 +678,10 @@ def do_start_cluster(for_nodes):
         count = len(nodes_this_iteration)
         if count == 0: continue
         if start_type == "bench": print_uri = True
-        print("Waiting 2 seconds before starting services on the" +
+        print("Starting services on the" +
               (f" {count} " if count>1 else " ") +
               color(start_type, first(start_type).clr, " ") +
               f" node{'s' if count>1 else ''}...")
-        time.sleep(2)
         run_for_all(nodes_this_iteration, lambda node: [
             ssh(node, f"bash ~/scripts/start_{node.type}.sh")
         ])
