@@ -336,6 +336,7 @@ def generate_config_files():
                 ],
             },
             "Security": {
+                "InsecureAllowAll": True,
                 "APIKey": {
                     "UseHopsworksAPIKeys": False,
                 },
