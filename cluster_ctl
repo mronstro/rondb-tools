@@ -1,49 +1,86 @@
 #!/usr/bin/env python3
 
-import json, math, os, re, shutil, subprocess, sys, threading, time
+import ipaddress, json, math, os, re, shutil, subprocess, sys, threading, time
 from pathlib import Path
 from functools import cache
+from dataclasses import dataclass
 
 # Constants
-USER = "ubuntu"
-WORKSPACE = f"/home/{USER}/workspace"
-RUN_DIR = f"{WORKSPACE}/rondb-run"
 NUM_CLUSTER_CONN_MYSQLD=1
 NUM_CLUSTER_CONN_RDRS=2
 NUM_CLUSTER_CONN_BENCH=1
-config_required_strings = [
-    "bench_instance_type",
-    "cpu_platform",
-    "glibc_version",
-    "grafana_instance_type",
-    "mysqld_instance_type",
-    "ndb_mgmd_instance_type",
-    "ndbmtd_instance_type",
-    "prometheus_instance_type",
-    "rdrs_instance_type",
-    "region",
-    "rondb_version",
-]
-config_required_ints = [
-    "bench_count",
-    "bench_disk_size",
-    "mysqld_count",
-    "mysqld_disk_size",
-    "ndbmtd_count",
-    "ndbmtd_disk_size",
-    "num_azs",
-    "prometheus_disk_size",
-    "rdrs_count",
-    "rdrs_disk_size",
-    "rondb_replicas",
-    "rdrs_major_version",
-]
-config_vars_not_in_tfvars = [
-    "rondb_replicas",
-    "rondb_version",
-    "rdrs_major_version",
-    "glibc_version",
-]
+
+# Config schema
+def config_schema():
+    config_variables = [
+        # Name                         type         TF       AWS      Static
+        ("bench_count",                'pos_int',   True,    True,    False ),
+        ("bench_cpus_per_node",        'pos_int',   False,   False,   True  ),
+        ("bench_disk_size",            'pos_int',   True,    True,    False ),
+        ("bench_instance_type",        'string',    True,    True,    False ),
+        ("bench_private_ips",          'ip_list',   False,   False,   True  ),
+        ("bench_public_ips",           'ip_list',   False,   False,   True  ),
+        ("cpu_platform",               'cpu_pl',    True,    True,    True  ),
+        ("deployment_type",            'string',    False,   True,    True  ),
+        ("glibc_version",              'string',    False,   True,    True  ),
+        ("grafana_instance_type",      'string',    True,    True,    False ),
+        ("grafana_private_ips",        'ip_list',   False,   False,   True  ),
+        ("grafana_public_ips",         'ip_list',   False,   False,   True  ),
+        ("mysqld_count",               'pos_int',   True,    True,    False ),
+        ("mysqld_disk_size",           'pos_int',   True,    True,    False ),
+        ("mysqld_instance_type",       'string',    True,    True,    False ),
+        ("mysqld_private_ips",         'ip_list',   False,   False,   True  ),
+        ("mysqld_public_ips",          'ip_list',   False,   False,   True  ),
+        ("ndb_mgmd_instance_type",     'string',    True,    True,    False ),
+        ("ndb_mgmd_private_ips",       'ip_list',   False,   False,   True  ),
+        ("ndb_mgmd_public_ips",        'ip_list',   False,   False,   True  ),
+        ("ndbmtd_count",               'pos_int',   True,    True,    False ),
+        ("ndbmtd_disk_size",           'pos_int',   True,    True,    False ),
+        ("ndbmtd_instance_type",       'string',    True,    True,    False ),
+        ("ndbmtd_private_ips",         'ip_list',   False,   False,   True  ),
+        ("ndbmtd_public_ips",          'ip_list',   False,   False,   True  ),
+        ("node_user",                  'string',    False,   False,   True  ),
+        ("num_azs",                    'pos_int',   True,    True,    False ),
+        ("prometheus_disk_size",       'pos_int',   True,    True,    False ),
+        ("prometheus_instance_type",   'string',    True,    True,    False ),
+        ("prometheus_private_ips",     'ip_list',   False,   False,   True  ),
+        ("prometheus_public_ips",      'ip_list',   False,   False,   True  ),
+        ("rdrs_count",                 'pos_int',   True,    True,    False ),
+        ("rdrs_disk_size",             'pos_int',   True,    True,    False ),
+        ("rdrs_instance_type",         'string',    True,    True,    False ),
+        ("rdrs_major_version",         'one_two',   False,   True,    True  ),
+        ("rdrs_private_ips",           'ip_list',   False,   False,   True  ),
+        ("rdrs_public_ips",            'ip_list',   False,   False,   True  ),
+        ("region",                     'string',    True,    True,    False ),
+        ("rondb_replicas",             'pos_int',   False,   True,    True  ),
+        ("rondb_version",              'string',    False,   True,    True  ),
+        ("ssh_key_file",               'string',    False,   False,   True  ),
+    ]
+    def ip_valid(ip):
+        try: ipaddress.ip_address(ip); return True
+        except ValueError: return False
+    validators = {
+        'pos_int': (lambda x: None if isinstance(x, int) and x > 0 else
+                    "must be a positive integer"),
+        'string': (lambda x: None if isinstance(x, str) and len(x) > 0 else
+                   "must be a nonempty string"),
+        'ip_list': (lambda x: None
+                    if isinstance(x, list)
+                    and all(isinstance(i, str) and ip_valid(i) for i in x)
+                    else "must be a list of valid IP addresses"),
+        'cpu_pl': (lambda x: None if x in ['arm64_v8', 'x86_64']
+                   else "must be either 'arm64_v8' or 'x86_64'"),
+        'one_two': (lambda x: None if x in [1, 2]
+                    else "must be either 1 or 2"),
+    }
+    @dataclass(slots=True, frozen=True)
+    class ConfigVar:
+        validate: callable
+        TF: bool
+        AWS: bool
+        static: bool
+    return {name: ConfigVar(validators[validator_name], *rest)
+            for [name, validator_name, *rest] in config_variables}
 
 trueColor = not ('TERM_PROGRAM' in os.environ and
                  'Apple_Terminal' in os.environ['TERM_PROGRAM'])
@@ -74,8 +111,8 @@ def all_nodes():
     nodes = []
     nodeid = 0
     for node_type, num_nodeids, clr in node_types:
-        public_ips = get_tf_output(f'{node_type}_public_ips')
-        private_ips = get_tf_output(f'{node_type}_private_ips')
+        public_ips = get_deploy_output(f'{node_type}_public_ips')
+        private_ips = get_deploy_output(f'{node_type}_private_ips')
         assert len(public_ips) == len(private_ips), "IP count mismatch"
         for i in range(len(public_ips)):
             nodes.append(Node(node_type,
@@ -135,29 +172,37 @@ def config():
     # Import config from ./config.py, validate and return
     import config as config_module
     c = config_module.config
-    for var in config_required_strings + config_required_ints:
+    if "deployment_type" not in c:
+        die("Config variable 'deployment_type' not found in config.py.")
+    dt = c['deployment_type']
+    if dt not in ["aws", "static"]:
+        die("Config variable 'deployment_type' must be either 'aws' or"
+            " 'static'.")
+    schema = config_schema()
+    included = {'aws': lambda x: x.AWS, 'static': lambda x: x.static}[dt]
+    included_vars = [ var for var in schema if included(schema[var]) ]
+    for var in c:
+        if var not in schema:
+            die(f"Unexpected variable '{var}' in config.py.")
+        if var not in included_vars:
+            die(f"Config variable '{var}' is not supported in deployment type"
+                f" '{dt}'.")
+    for var in included_vars:
         if var not in c:
             die(f"Config variable '{var}' not found in config.py.")
-        if var in config_required_strings and not (
-                isinstance(c[var], str) and c[var].strip()):
-            die(f"Config variable '{var}' must be a nonempty string in"
-                " config.py.")
-        if var in config_required_ints and not (
-                isinstance(c[var], int) and c[var] > 0):
-            die(f"Config variable '{var}' must be a positive integer in"
-                " config.py.")
-    if c['ndbmtd_count'] % c['rondb_replicas'] != 0:
-        die(f"Error: ndbmtd_count ({c['ndbmtd_count']}) must be divisible by"
-            " rondb_replicas ({c['rondb_replicas']}).")
-    if c['cpu_platform'] not in ['arm64_v8', 'x86_64']:
-        die(f"Error: cpu_platform must be either 'arm64_v8' or 'x86_64',"
-            f" but got '{c['cpu_platform']}' from config.py.")
-    if c['rdrs_major_version'] not in [1, 2]:
-        die(f"Error: rdrs_major_version must be either 1 or 2, but got"
-            f" {c['rdrs_major_version']} from config.py.")
-    for var in c:
-        if var not in config_required_strings + config_required_ints:
-            die(f"Unexpected variable '{var}' in config.py.")
+        req = schema[var].validate(c[var])
+        if req is not None:
+            die(f"Config variable '{var}' {req}.")
+    ndbmtd_count = (c['ndbmtd_count']
+                    if dt == "aws" else len(c['ndbmtd_public_ips']))
+    if ndbmtd_count % c['rondb_replicas'] != 0:
+        die(f"Config variable 'ndbmtd_count' ({c['ndbmtd_count']}) must be"
+            f" divisible by rondb_replicas ({c['rondb_replicas']}).")
+    if dt == "static" and len(c['rdrs_public_ips']) > 1:
+        # In order to support multiple rdrs nodes in static deployment, we need
+        # to add load balancers and config variables rdrs_nlb_dns and
+        # rondis_nlb_dns.
+        die("Error: Static deployment does not support multiple RDRS nodes.")
     return c
 def get_config(var_name):
     c = config()
@@ -165,7 +210,7 @@ def get_config(var_name):
         return c[var_name]
     die(f"Error: config variable '{var_name}' not found.")
 
-# Terraform outputs
+# Deploy outputs
 has_read_tf_output = False
 @cache
 def tf_output():
@@ -185,8 +230,24 @@ def tf_output():
             die(f"Error running terraform output: {proc.stdout + proc.stderr}")
     has_read_tf_output = True
     return json.loads(tf_output_file.read_text(encoding='utf-8'))
-def get_tf_output(output_name):
-    return tf_output()[output_name]['value']
+def get_deploy_output(output_name):
+    if output_name == "workspace":
+        return f"/home/{get_deploy_output('node_user')}/workspace"
+    if output_name == "run_dir":
+        return f"{get_deploy_output('workspace')}/rondb-run"
+    if output_name == "durable_dir":
+        return f"/home/{get_deploy_output('node_user')}/durable"
+    dt = get_config('deployment_type')
+    if dt == "aws":
+        if output_name == "node_user":
+            return "ubuntu"
+        if output_name == "ssh_key_file":
+            return f"{get_aws_key_name()}.pem"
+        return tf_output()[output_name]['value']
+    assert dt == "static"
+    if output_name in config():
+        return get_config(output_name)
+    die(f"Bug: Don't know how to get deploy output '{output_name}'.")
 
 @cache
 def get_rnd_cache():
@@ -204,7 +265,10 @@ def get_rnd_cache():
 def get_gui_secret(): return get_rnd_cache()["gui_secret"]
 def get_demo_mysql_pw(): return get_rnd_cache()["demo_mysql_pw"]
 def get_unique_suffix(): return get_rnd_cache()["unique_suffix"]
-def get_key_name(): return f"rondb_bench_key_{get_unique_suffix()}"
+def get_aws_key_name():
+    if get_config('deployment_type') == "static":
+        die("Bug")
+    return f"rondb_bench_key_{get_unique_suffix()}"
 
 # Util functions
 def w(name, *content):
@@ -218,31 +282,38 @@ def generate_config_files():
     shutil.rmtree("config_files", ignore_errors=True)
     mkdir("config_files")
     # Extract some values
-    CONFIG_FILES=f"/home/{USER}/config_files"
+    NODE_USER = get_deploy_output('node_user')
+    WORKSPACE = get_deploy_output('workspace')
+    RUN_DIR = get_deploy_output('run_dir')
+    DURABLE_DIR = get_deploy_output('durable_dir')
+    CONFIG_FILES=f"/home/{NODE_USER}/config_files"
     NDB_MGMD_PRI = first('ndb_mgmd').private_ip
     NO_OF_REPLICAS = get_config('rondb_replicas')
-    NUM_AZS = get_config('num_azs')
     RONDB_VERSION = get_config('rondb_version')
     GLIBC_VERSION = get_config('glibc_version')
     CPU_PLATFORM = get_config('cpu_platform')
     TARBALL_NAME = f"rondb-{RONDB_VERSION}-linux-glibc{GLIBC_VERSION}-{CPU_PLATFORM}.tar.gz"
-    RDRS_IP= (get_tf_output('rdrs_nlb_dns')
+    RDRS_IP= (get_deploy_output('rdrs_nlb_dns')
               if node_count('rdrs') > 1
               else first('rdrs').private_ip)
+    RONDIS_IP= (get_deploy_output('rondis_nlb_dns')
+                if node_count('rdrs') > 1
+                else first('rdrs').private_ip)
     GUI_SECRET = get_gui_secret()
     # Generate shell_vars
     shell_vars = {
-        "USER": USER,
+        "NODE_USER": NODE_USER,
         "WORKSPACE": WORKSPACE,
         "CONFIG_FILES": CONFIG_FILES,
         "RUN_DIR": RUN_DIR,
+        "DURABLE_DIR": DURABLE_DIR,
+        "NGINX_ERROR_LOG": f"{RUN_DIR}/nginx/nginx_error.log",
         "TARBALL_NAME": TARBALL_NAME,
-        "NUM_AZS": f"{NUM_AZS}",
         "NDB_MGMD_PRI": NDB_MGMD_PRI,
         "MYSQLD_PUB_1": first('mysqld').public_ip,
         "MYSQLD_PRI_1": first('mysqld').private_ip,
         "RDRS_URI": f"http://{RDRS_IP}:4406",
-        "RONDIS_LB": f"{get_tf_output('rondis_nlb_dns')}:6379",
+        "RONDIS_LB": f"{RONDIS_IP}:6379",
         "RDRS_PRI_1": first('rdrs').private_ip,
         "RDRS_MAJOR_VERSION": f"{get_config('rdrs_major_version')}",
         "BENCH_PRI_1": first('bench').private_ip,
@@ -285,8 +356,11 @@ def generate_config_files():
                 f"# {node.name()}",
                 f"HostName={node.private_ip}",
                 f"NodeId={nodeid}",
-                f"LocationDomainId={(node.idx % NUM_AZS) + 1}"
             ]
+            if get_config('deployment_type') == "aws":
+                configini += [
+                    f"LocationDomainId={(node.idx % get_config('num_azs')) + 1}"
+                ]
     w("config_files/config.ini", *configini)
     # Generate my.cnf
     w("config_files/my.cnf",
@@ -299,7 +373,7 @@ def generate_config_files():
         "log_error_verbosity=3",
         "",
         "[mysql_cluster]",
-        f"ndb-connectstring={NDB_MGMD_PRI}",
+        f"ndb-connectstring={NDB_MGMD_PRI}:1186",
       )
     for node in all_nodes():
         w(f"config_files/nodeinfo_{node.name()}",
@@ -493,7 +567,7 @@ def generate_config_files():
        '      return 302 $2;',
        '    }',
        '    location /grafana {',
-       '      if ($secret_is_valid = 0) {',
+       '      if ($grafana_access = 0) {',
        '        return 403;',
        '      }',
        '      proxy_http_version 1.1;',
@@ -502,7 +576,7 @@ def generate_config_files():
       f'      proxy_pass http://{first("grafana").private_ip}:3000;',
        '    }',
        '    location /locust/ {',
-       '      if ($secret_is_valid = 0) {',
+       '      if ($locust_http_port = 0) {',
        '        return 403;',
        '      }',
        '      proxy_http_version 1.1;',
@@ -523,7 +597,7 @@ def generate_config_files():
     # WARNING: nginx-dynamic.conf is re-generated in scripts/python_server.py,
     # so keep the logic in sync.
     w("config_files/nginx-dynamic.conf",
-       'map $gui_secret $secret_is_valid {',
+       'map $gui_secret $grafana_access {',
       f'    "{GUI_SECRET}" 1;',
        '    default 0;',
        '}',
@@ -619,44 +693,50 @@ def run_for_all(for_nodes, cmdfun):
     check_failed()
 def ssh_opts():
     return [
-        "-i", f"{get_key_name()}.pem",
+        "-i", get_deploy_output('ssh_key_file'),
         "-o", "StrictHostKeyChecking=no",
         "-q"]
 def ssh(node, cmd=""):
-    return ["ssh", *ssh_opts(), f"{USER}@{node.public_ip}",
+    NODE_USER = get_deploy_output('node_user')
+    return ["ssh", *ssh_opts(), f"{NODE_USER}@{node.public_ip}",
             *([] if cmd=="" else [cmd])]
 def rsync(file, node):
+    NODE_USER = get_deploy_output('node_user')
     return ["rsync", "-az", "--delete", "-e", f"ssh {' '.join(ssh_opts())}",
-            file, f"{USER}@{node.public_ip}:"]
+            file, f"{NODE_USER}@{node.public_ip}:"]
 
 # deploy command
 def do_deploy(expr):
-    do_terraform()
+    if get_config('deployment_type') == "aws":
+        do_terraform()
     for_nodes = nodes_from_expression(expr)
     do_install(for_nodes)
     do_start_cluster(for_nodes)
 
 # terraform command
 def do_terraform():
+    if get_config('deployment_type') != "aws":
+        die("Error: 'terraform' command is only supported for AWS deployment.")
     if has_read_tf_output:
         die("Bug: Called do_terraform() after tf_output()")
     # Generate ./terraform.tfvars
+    schema = config_schema()
+    var_repr = lambda x: f'"{x}"' if isinstance(x, str) else f'{x}'
     w("terraform.tfvars",
-      *[f'{var}="{get_config(var)}"' for var in config_required_strings
-        if var not in config_vars_not_in_tfvars],
-      *[f'{var}={get_config(var)}' for var in config_required_ints
-        if var not in config_vars_not_in_tfvars],
-      f'key_name="{get_key_name()}"',
+      *[f'{var}={var_repr(get_config(var))}'
+        for var in schema
+        if schema[var].TF],
+      f'key_name="{get_aws_key_name()}"',
       f'unique_suffix="{get_unique_suffix()}"',
       )
-    # Create AWS SSH key pair and save to a .pem file, unless it already exists.
-    key_name=get_key_name()
-    key_file=Path(f"{key_name}.pem")
+    # Create AWS SSH key pair and save to file, unless it already exists.
+    key_name=get_aws_key_name()
+    key_file=Path(get_deploy_output('ssh_key_file'))
     if not key_file.exists():
         print(f"Creating key pair {key_name}...")
         subprocess.run(f"aws ec2 create-key-pair --key-name {key_name}"
                        f" --key-type ed25519 --region {get_config('region')}"
-                       f" --query KeyMaterial --output text > {key_name}.pem",
+                       f" --query KeyMaterial --output text > {key_file}",
                        shell=True, check=True)
         key_file.chmod(0o600)
     if not key_file.exists() or key_file.stat().st_size == 0:
@@ -735,6 +815,8 @@ def do_stop_cluster(for_nodes):
 
 # open_tmux command
 def do_open_tmux(for_nodes):
+    WORKSPACE = get_deploy_output('workspace')
+    RUN_DIR = get_deploy_output('run_dir')
     if not shutil.which("tmux"):
         die("tmux is not installed.")
     def tmux(*args, check=True, **kwargs):
@@ -814,7 +896,7 @@ def do_start_locust(rows, total_workers, only_validate=False):
     if rows < 1 or 1000000000 < rows:
         die("NUM_ROWS must be in the range 1 - 1,000,000,000")
     num_bench_nodes = node_count("bench")
-    cpus_per_node = get_tf_output('bench_cpus_per_node')
+    cpus_per_node = get_deploy_output('bench_cpus_per_node')
     cpus = num_bench_nodes * cpus_per_node
     max_workers = cpus - 1 # Reserve one CPU for master
     min_workers = max(1, num_bench_nodes - 1)
@@ -847,11 +929,22 @@ def do_stop_locust():
 
 # start_demo command
 def do_start_demo():
+    RUN_DIR = get_deploy_output('run_dir')
+    DURABLE_DIR = get_deploy_output('durable_dir')
+    if node_count("bench") > 1:
+        die("Demo server not supported for multiple bench nodes.")
     run_for_one_node(first('bench'), lambda node: [
         ssh(node, "bash ~/scripts/start_python_server.sh")
     ])
     check_failed()
     uri=lnk(f"http://{first('bench').public_ip}:8080/")
+    print('To show demo server logs, run:')
+    print(f'  ./cluster_ctl ssh {first("bench").name()} cat {DURABLE_DIR}/demo.log')
+    print('To show demo server state, run:')
+    print(f'  ./cluster_ctl ssh {first("bench").name()} cat {DURABLE_DIR}/demo_state.json | jq')
+    print('To show web server access / error logs, run:')
+    print(f'  ./cluster_ctl ssh {first("bench").name()} cat {RUN_DIR}/demo/uvicorn.log')
+    print(f'  ./cluster_ctl ssh {first("bench").name()} cat {RUN_DIR}/demo/uvicorn.err')
     print(f'Go to {uri} in your browser to see the demo UI.')
 
 # stop_demo command
@@ -888,7 +981,7 @@ def do_list():
                        for i, s in enumerate(row)).rstrip())
 
 # cleanup command
-def do_cleanup():
+def cleanup_aws():
     # Destroy terraform cluster if it exists
     state_file = Path("terraform.tfstate")
     if state_file.exists():
@@ -902,8 +995,8 @@ def do_cleanup():
         print("Skip 'terraform destroy' since there is no terraform.tfstate"
               " file.")
     # Destroy AWS SSH key pair if it exists
-    key_name=get_key_name()
-    key_file=Path(f"{key_name}.pem")
+    key_name=get_aws_key_name()
+    key_file=Path(get_deploy_output('ssh_key_file'))
     if key_file.exists():
         print("Deleting AWS SSH key.")
         subprocess.run(["aws", "ec2", "delete-key-pair",
@@ -914,6 +1007,11 @@ def do_cleanup():
         print("Done deleting AWS SSH key.")
     else:
         print("No AWS SSH key to delete.")
+    cleanup_common()
+def cleanup_static():
+    cleanup_common()
+    print("Cannot destroy nodes, since they are provided statically. You'll have to do that manually.")
+def cleanup_common():
     if shutil.which("tmux"):
         do_kill_tmux()
     print("Deleting temporary files.")
@@ -921,6 +1019,11 @@ def do_cleanup():
                    " __pycache__ secrets.json",
                    shell=True, check=True)
     print("Done deleting temporary files.")
+def do_cleanup():
+    {
+        "aws": cleanup_aws,
+        "static": cleanup_static,
+    }[get_config('deployment_type')]()
 
 # CLI
 def main():
@@ -930,7 +1033,7 @@ def main():
         print('\n'.join([
             "Usage:",
             "  ./cluster_ctl deploy [NODES]",
-            "    Configure, initialize and apply terraform, as needed. Then install and start",
+            "    Configure, initialize and apply terraform, if needed. Then install and start",
             "    RonDB services.",
             "      NODES: See bottom.",
             "",
@@ -989,17 +1092,11 @@ def main():
             "  ./cluster_ctl stop_locust",
             "    Stop locust. Called by start_locust (and hence bench_locust).",
             "",
-            "  ./cluster_ctl start_demo",
-            "    Start demo web UI.",
-            "",
-            "  ./cluster_ctl stop_demo",
-            "    Stop demo web UI.",
-            "",
             "  ./cluster_ctl list",
             "    List node information.",
             "",
             "  ./cluster_ctl cleanup",
-            "    Destroy AWS resources and delete temporary files and tmux session.",
+            "    Destroy AWS resources (if any) and delete temporary files and tmux session.",
             "",
             "NODES: A comma-separated list of node names and node types. If given, operate",
             "       only on matching nodes, otherwise on all nodes. Available node types are:",

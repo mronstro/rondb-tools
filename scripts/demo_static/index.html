@@ -1,86 +1,262 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>RonDB Control UI</title>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RDRS Demo</title>
+    <link rel="icon" href="/favicon.png" />
     <style>
-        body { font-family: Arial, sans-serif; padding: 2em; background: #f9f9f9; }
-        button { padding: 0.5em 1em; margin: 0.5em 0; }
-        input { padding: 0.5em; margin: 0.5em 0; }
+      /* RonDB style-guide aligned tokens */
+      :root{
+        --bg: #161616;          /* Quantum */
+        --panel: #1e1e1e;       /* Surface on Quantum */
+        --text: #FAF9F6;        /* Off-white */
+        --muted: #DFDFDF;       /* Sipher */
+        --accent: #4593E0;      /* Orbital */
+        --brand: #FFDF00;       /* Terminal */
+        --ok: #57BE97;          /* Circuit */
+        --warn: #FE8C00;        /* Giga */
+        --err: #E68108;         /* Plasma */
+        --border: #484848;      /* Matrix */
+      }
+
+      html, body { height: 100%; }
+      body{
+        margin:0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .wrap{ max-width: 900px; margin: 40px auto; padding: 0 16px; }
+      h1{ font-size:1.8rem; letter-spacing:.2px; margin:0 0 8px; }
+      p.sub{ margin:0 0 24px; color: var(--muted); }
+
+      .grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:16px; }
+      .card{
+        background: var(--panel);
+        border:1px solid var(--border);
+        border-radius:14px;
+        padding:16px;
+        box-shadow: 0 6px 20px rgba(0,0,0,.35);
+      }
+      .card h2{ margin:0 0 10px; font-size:1.1rem; }
+      .row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px dashed rgba(255,255,255,.08); }
+      .row:last-child{ border-bottom:0; }
+
+      .k{ color: var(--muted); font-size:.95rem; }
+      .v{ font-variant-numeric: tabular-nums; }
+
+      .btns{ display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); }
+      button, .linkbtn{
+        appearance:none;
+        border:1px solid var(--border);
+        border-radius:12px;
+        padding:10px 14px;
+        background:#222; color: var(--text);
+        font-weight:560; cursor:pointer;
+        transition: transform .02s ease, opacity .15s ease, background .15s ease, border-color .15s ease;
+        text-decoration:none; display:inline-block; text-align:center;
+      }
+      button:hover, .linkbtn:hover{ background:#262626; border-color: var(--accent); }
+      button:active{ transform: translateY(1px); }
+      button[disabled]{ opacity:.45; cursor:not-allowed; }
+      .linkbtn.disabled{ opacity:.45; pointer-events:none; }
+      button.highlighted, .linkbtn.highlighted { background: var(--brand); color: var(--bg); }
+
+      .pill{ display:inline-flex; align-items:center; gap:8px; padding:4px 10px; border-radius:999px; border:1px solid var(--border); font-size:.92rem; }
+      .dot{ width:8px; height:8px; border-radius:999px; display:inline-block; }
+      .ok{ background: var(--ok); }
+      .warn{ background: var(--warn); }
+      .err{ background: var(--err); }
+
+      .banner{
+        position: sticky; top:0; z-index:50;
+        backdrop-filter: blur(6px);
+        background: rgba(230,129,8,.18); /* Plasma tint */
+        border:1px solid var(--err);
+        color: var(--text);
+        padding:14px 16px; margin-bottom:16px; border-radius:12px; display:none;
+      }
+      .banner strong{ color: var(--text); }
+      .banner .actions{ margin-top:8px; }
+
+      .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+      footer{ margin-top:26px; color: var(--muted); font-size:.9rem; }
+
+      /* Focus visibility per style guide (Terminal) */
+      :is(button,.linkbtn,[href],[tabindex]):focus-visible{
+        outline: 2px solid var(--brand);
+        outline-offset: 2px;
+      }
     </style>
-    <link href="favicon.png" rel="shortcut icon" />
-</head>
-<body>
-    <h2>Start Test Environment</h2>
-    <button onclick="createDatabase()">Create Database</button>
-    <div id="db-spinner" style="display:none; margin: 1em 0; color: #555;">Creating database...</div>
-    <div id="db-status"></div>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>RDRS Demo Control</h1>
 
-    <h2>Run Locust</h2>
-    <label>Worker Count:</label>
-    <input id="workerCount" type="number" value="1" min="1" max="4"/><!-- todo get max from somewhere -->
-    <button onclick="runLocust()">Run Locust</button>
-    <div id="locust-status"></div>
-
-    <h2>Open Monitoring Interfaces</h2>
-    <button onclick="openGrafana()">Open Grafana</button>
-    <button onclick="openLocustUI()">Open Locust UI</button>
+      <div class="grid" style="margin-bottom:16px;">
+        <section class="card" aria-labelledby="statusH">
+          <h2 id="statusH">Status</h2>
+          <div class="row"><div class="k">Database</div><div class="v"><span class="pill"><span id="dbDot" class="dot"></span><span id="dbText">—</span></span></div></div>
+          <div class="row"><div class="k">Locust</div><div class="v"><span class="pill"><span id="locustDot" class="dot"></span><span id="locustText">—</span></span></div></div>
+          <div class="row"><div class="k">Session TTL</div><div class="v"><span id="ttl" class="mono">--:--</span></div></div>
+        </section>
+        <section class="card" aria-labelledby="actionsH">
+          <h2 id="actionsH">Actions</h2>
+          <div class="btns">
+            <button id="btnCreateDatabase">Create Database</button>
+            <button id="btnRunLocust">Run Locust</button>
+            <a id="btnOpenGrafana" class="linkbtn" target="_blank" rel="noopener">Open Grafana</a>
+            <a id="btnOpenLocust" class="linkbtn" target="_blank" rel="noopener">Open Locust UI</a>
+          </div>
+          <div id="msg" role="status" aria-live="polite" style="margin-top:10px; min-height:1.2em; color: var(--muted);"></div>
+        </section>
+      </div>
+      <section class="card" style="margin:16px 0;">
+        <div id="suggestion" role="status" aria-live="polite" style="min-height:1.2em; text-align:center; color: var(--brand);"></div>
+      </section>
+      <section class="card" style="margin:16px 0; font-size:1rem;">
+        <p>
+        This benchmark setup uses 1 benchmark client, 1 RDRS (RonDB REST Server) and 2 data nodes.
+        There is also a MySQL Server used to create the databases and tables.
+        </p>
+        <p>
+          REST requests are handled as follows:
+          <ol>
+            <li>The benchmark client sends a REST request to RDRS, containing several key lookup requests.</li>
+            <li>RDRS forwards the key lookup requests to the RonDB data nodes.</li>
+            <li>Data nodes process the request and send the responses back to RDRS.</li>
+            <li>RDRS compiles the key lookup results into one REST response, which is sent back to the benchmark client.</li>
+          </ol>
+        </p>
+        <p>
+          Each network jump induces a delay of about 250-280 &mu;s (ping latency is between 500-560 &mu;s).
+          Thus between 1.0-1.1 milliseconds latency is due to network latency.
+          The remainder of the latency is spent in RDRS, RonDB data nodes and the Python client.
+        </p>
+        <p>
+          The reported benchmark with 100M Key lookups on our <a href="https://rondb.com">front page</a> used a setup with network latency around 130 &mu;s.
+        </p>
+        <p>
+          This test cluster is running on 3 dedicated servers, each with an AMD Ryzen 7 7700 8-Core Processor and 64 GiB RAM.
+          The data, RDRS and bench nodes run as VMs, distributed such that each network jump needs to go to a different physical machine, in order to incur a realistic latency.
+        </p>
+      </section>
+    </div>
 
     <script>
-        let guiSecret = null;  // store gui_secret globally
-        async function createDatabase() {
-            const spinner = document.getElementById('db-spinner');
-            spinner.style.display = 'block'; // show spinner
-            try {
-                const res = await fetch('/create-database', {
-                    method: 'POST',
-                });
-                const data = await res.json();
-                guiSecret = data.gui_secret;  // store gui_secret in global variable
-                document.getElementById('db-status').innerText = JSON.stringify(data, null, 2);
-            } catch (err) {
-                document.getElementById('db-status').innerText = 'Error creating database.';
-            } finally {
-                spinner.style.display = 'none'; // hide spinner
-            }
-        }
+      // --- State ---
+      let vm = null;
 
-        async function runLocust() {
-            if (!guiSecret) {
-                alert('Please create the database first to get the gui_secret!');
-                return;
-            }
-            const count = document.getElementById('workerCount').value;
-            try {
-                const res = await fetch(`/run-locust?worker_count=${count}`, {
-                    method: 'POST',
-                    headers: {
-                        'X-AUTH': guiSecret   // add the gui_secret as header here
-                    }
-                });
-                const data = await res.json();
-                document.getElementById('locust-status').innerText = JSON.stringify(data, null, 2);
-            } catch (err) {
-                document.getElementById('locust-status').innerText = 'Error starting locust.';
-            }
-        }
+      // --- DOM shortcuts ---
+      const $ = (id) => document.getElementById(id);
+      const el = {
+        dbDot: $("dbDot"), dbText: $("dbText"),
+        locDot: $("locustDot"), locText: $("locustText"),
+        ttl: $("ttl"), msg: $("msg"),
+        btnCreateDatabase: $("btnCreateDatabase"), btnRunLocust: $("btnRunLocust"),
+        btnOpenGrafana: $("btnOpenGrafana"), btnOpenLocust: $("btnOpenLocust"),
+        suggestion: $("suggestion"),
+      };
 
-        function openGrafana() {
-            if (!guiSecret) {
-                alert('Please create the database first to get the gui_secret!');
-                return;
-            }
-            const url = `http://${location.hostname}:8080/secret=${guiSecret}/grafana/d/rdrs`;
-            window.open(url, '_blank');  // opens in new tab
-        }
+      // --- Utilities ---
+      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      function setPill(dotEl, textEl, ok, label){
+        dotEl.className = 'dot ' + (ok ? 'ok' : 'warn');
+        textEl.textContent = label;
+      }
+      function setMsg(text, kind='info') {
+        const colors = { info: 'var(--muted)', warn: 'var(--warn)', err: 'var(--err)', ok: 'var(--ok)' };
+        el.msg.style.color = colors[kind] || colors.info;
+        el.msg.textContent = text || '';
+      }
+      function setSuggestion(text) {
+        el.suggestion.textContent = text || '';
+      }
 
-        function openLocustUI() {
-            if (!guiSecret) {
-                alert('Please create the database first to get the gui_secret!');
-                return;
-            }
-            const url = `http://${location.hostname}:8080/secret=${guiSecret}/locust`;
-            window.open(url, '_blank');
+      // --- Render strictly from vm ---
+      function render(){
+        if(!vm) return;
+        setPill(el.dbDot, el.dbText, vm.db_status_ok, vm.db_status_text);
+        setPill(el.locDot, el.locText, vm.locust_status_ok, vm.locust_status_text);
+        el.btnCreateDatabase.disabled = !vm.can_create_database;
+        el.btnRunLocust.disabled = !vm.can_run_locust;
+        el.btnOpenGrafana.classList.toggle('disabled', !vm.can_open_grafana);
+        el.btnOpenGrafana.setAttribute('aria-disabled', String(!vm.can_open_grafana));
+        const dashboard = vm.default_grafana_dashboard || '';
+        el.btnOpenGrafana.href = dashboard ? `/grafana/d/${dashboard}` : '/grafana/';
+        el.btnOpenLocust.classList.toggle('disabled', !vm.can_open_locust);
+        el.btnOpenLocust.setAttribute('aria-disabled', String(!vm.can_open_locust));
+        el.btnOpenLocust.href = '/locust/';
+        // Message
+        if(Array.isArray(vm.user_message) && vm.user_message.length == 2)
+          setMsg(vm.user_message[0], vm.user_message[1]);
+        else
+          setMsg("", "");
+        setSuggestion(vm.suggestion);
+        el.btnCreateDatabase.classList.toggle('highlighted', vm.highlight == "db");
+        el.btnRunLocust.classList.toggle('highlighted', vm.highlight == "locust");
+        el.btnOpenLocust.classList.toggle('highlighted', vm.highlight == "latency");
+        el.btnOpenGrafana.classList.toggle('highlighted', vm.highlight == "latency");
+      }
+
+      // --- Poll /viewmodel continuously ---
+      async function fetchViewModel(){
+        try{
+          const res = await fetch('/viewmodel', { credentials:'same-origin' });
+          if(!res.ok) throw new Error(`GET /viewmodel ${res.status}`);
+          vm = await res.json();
+          setMsg('');
+        }catch(e){
+          setMsg('Unable to fetch status. Retrying…', 'warn');
+        }finally{
+          render();
         }
+      }
+
+      // --- Actions ---
+      async function action(path){
+        try{
+          const res = await fetch(path, { method:'GET', credentials:'same-origin' });
+          if(!res.ok){ setMsg(`${path} failed with HTTP (${res.status})`, 'err'); return null; }
+          const data = await res.json();
+          vm = data;
+          setMsg('');
+        }catch(e){
+          setMsg(`${path} failed: ${e.message}`, 'err');
+        }finally{
+          render();
+        }
+      }
+
+      // Button handlers
+      el.btnCreateDatabase.addEventListener('click', () => action('/create-database'));
+      el.btnRunLocust.addEventListener('click', () => action('/run-locust'));
+
+      // --- Tickers ---
+      (async function pollLoop(){
+        while(true){
+          await fetchViewModel();
+          await sleep(3000);
+        }
+      })();
+      setInterval(() => {
+        if (vm == null) return;
+        expiresAt = Number(vm.expires_at || 0);
+        if(expiresAt) {
+          secs = Math.floor(expiresAt - Date.now()/1000);
+          if(secs>0) {
+            const m = Math.floor(secs / 60);
+            const s = secs % 60;
+            el.ttl.textContent =  `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+            return;
+          }
+        }
+        el.ttl.textContent = '--:--';
+      }, 1000);
+
+      render();
     </script>
-</body>
+  </body>
 </html>
