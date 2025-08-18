@@ -9,6 +9,9 @@ else
   exit 1
 fi
 
+# Useful for running unreleased rdrs binaries
+export LD_LIBRARY_PATH="${WORKSPACE}/rondb/lib"
+
 before-start $RDRS_BIN
 (set -x
  with-restarts $RDRS_BIN \
