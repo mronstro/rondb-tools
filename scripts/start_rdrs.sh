@@ -11,6 +11,7 @@ fi
 
 before-start $RDRS_BIN
 (set -x
+ with-restarts $RDRS_BIN \
  $bin/$RDRS_BIN --config "./config_files/rdrs_${NODEINFO_IDX}.json" \
              > "${RUN_DIR}/rdrs/rdrs.log" 2>&1 &)
 after-start $RDRS_BIN "${RUN_DIR}/rdrs/rdrs.log"

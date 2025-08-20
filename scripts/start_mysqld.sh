@@ -5,7 +5,9 @@ source ./scripts/include.sh
 before-start mysqld
 (set -x
  $bin/mysqld --defaults-file=./config_files/my.cnf --initialize-insecure
- $bin/mysqld --defaults-file=./config_files/my.cnf &)
+ with-restarts mysqld \
+ $bin/mysqld --defaults-file=./config_files/my.cnf \
+ > "${RUN_DIR}/mysqld/mysqld.out" 2>&1 &)
 after-start mysqld ""
 
 # Operations to run on the first node only
@@ -29,6 +31,7 @@ if [ $NODEINFO_IDX -eq 0 ]; then
   before-start mysqld_exporter
   export DATA_SOURCE_NAME='root:@tcp(127.0.0.1:3306)/'
   (set -x
+   with-restarts mysqld_exporter \
    ${WORKSPACE}/mysqld_exporter/mysqld_exporter --no-collect.slave_status \
                > "${RUN_DIR}/mysqld_exporter.log" 2>&1 &)
   after-start mysqld_exporter ""

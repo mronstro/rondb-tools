@@ -14,6 +14,7 @@ before-start locust
 if [ ${NODEINFO_IDX} -eq 0 ]; then
   # Start master
   (set -x
+   with-restarts locust \
    taskset -c 0 locust -f ./scripts/locust_batch_read.py --host=${RDRS_URI} \
            --batch-size=100 --table-size=$LOCUST_TABLE_SIZE \
            --database-name=benchmark --master \
@@ -22,6 +23,7 @@ if [ ${NODEINFO_IDX} -eq 0 ]; then
   # Start workers
   for ((i=1; i<=${WORKERS}; i++)); do
     (set -x
+     with-restarts locust \
      taskset -c ${i} locust -f ./scripts/locust_batch_read.py --worker \
              --master-host=${BENCH_PRI_1} \
              > ${RUN_DIR}/locust_worker_cpu_${i}.log 2>&1 &)
@@ -29,6 +31,7 @@ if [ ${NODEINFO_IDX} -eq 0 ]; then
 else
   for ((i=0; i<${WORKERS}; i++)); do
     (set -x
+     with-restarts locust \
      taskset -c ${i} locust -f ./scripts/locust_batch_read.py --worker \
              --master-host=${BENCH_PRI_1} \
              > ${RUN_DIR}/locust_worker_cpu_${i}.log 2>&1 &)
