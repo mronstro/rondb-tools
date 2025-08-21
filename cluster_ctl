@@ -1,59 +1,101 @@
 #!/usr/bin/env python3
 
-import json, math, os, re, shutil, subprocess, sys, threading, time
+import ipaddress, json, math, os, re, shutil, subprocess, sys, threading, time
 from pathlib import Path
 from functools import cache
+from dataclasses import dataclass
 
 # Constants
-USER = "ubuntu"
-WORKSPACE = f"/home/{USER}/workspace"
-RUN_DIR = f"{WORKSPACE}/rondb-run"
 NUM_CLUSTER_CONN_MYSQLD=1
 NUM_CLUSTER_CONN_RDRS=2
 NUM_CLUSTER_CONN_BENCH=1
-config_required_strings = [
-    "bench_instance_type",
-    "cpu_platform",
-    "glibc_version",
-    "grafana_instance_type",
-    "mysqld_instance_type",
-    "ndb_mgmd_instance_type",
-    "ndbmtd_instance_type",
-    "prometheus_instance_type",
-    "rdrs_instance_type",
-    "region",
-    "rondb_version",
-]
-config_required_ints = [
-    "bench_count",
-    "bench_disk_size",
-    "mysqld_count",
-    "mysqld_disk_size",
-    "ndbmtd_count",
-    "ndbmtd_disk_size",
-    "num_azs",
-    "prometheus_disk_size",
-    "rdrs_count",
-    "rdrs_disk_size",
-    "rondb_replicas",
-]
-config_vars_not_in_tfvars = [
-    "rondb_replicas",
-    "rondb_version",
-    "glibc_version",
-]
 
-# Node types, number of NDB NodeIds, and color
+# Config schema
+def config_schema():
+    config_variables = [
+        # Name                         type         TF       AWS      Static
+        ("bench_count",                'pos_int',   True,    True,    False ),
+        ("bench_cpus_per_node",        'pos_int',   False,   False,   True  ),
+        ("bench_disk_size",            'pos_int',   True,    True,    False ),
+        ("bench_instance_type",        'string',    True,    True,    False ),
+        ("bench_private_ips",          'ip_list',   False,   False,   True  ),
+        ("bench_public_ips",           'ip_list',   False,   False,   True  ),
+        ("cpu_platform",               'cpu_pl',    True,    True,    True  ),
+        ("deployment_type",            'string',    False,   True,    True  ),
+        ("glibc_version",              'string',    False,   True,    True  ),
+        ("grafana_instance_type",      'string',    True,    True,    False ),
+        ("grafana_private_ips",        'ip_list',   False,   False,   True  ),
+        ("grafana_public_ips",         'ip_list',   False,   False,   True  ),
+        ("mysqld_count",               'pos_int',   True,    True,    False ),
+        ("mysqld_disk_size",           'pos_int',   True,    True,    False ),
+        ("mysqld_instance_type",       'string',    True,    True,    False ),
+        ("mysqld_private_ips",         'ip_list',   False,   False,   True  ),
+        ("mysqld_public_ips",          'ip_list',   False,   False,   True  ),
+        ("ndb_mgmd_instance_type",     'string',    True,    True,    False ),
+        ("ndb_mgmd_private_ips",       'ip_list',   False,   False,   True  ),
+        ("ndb_mgmd_public_ips",        'ip_list',   False,   False,   True  ),
+        ("ndbmtd_count",               'pos_int',   True,    True,    False ),
+        ("ndbmtd_disk_size",           'pos_int',   True,    True,    False ),
+        ("ndbmtd_instance_type",       'string',    True,    True,    False ),
+        ("ndbmtd_private_ips",         'ip_list',   False,   False,   True  ),
+        ("ndbmtd_public_ips",          'ip_list',   False,   False,   True  ),
+        ("node_user",                  'string',    False,   False,   True  ),
+        ("num_azs",                    'pos_int',   True,    True,    False ),
+        ("prometheus_disk_size",       'pos_int',   True,    True,    False ),
+        ("prometheus_instance_type",   'string',    True,    True,    False ),
+        ("prometheus_private_ips",     'ip_list',   False,   False,   True  ),
+        ("prometheus_public_ips",      'ip_list',   False,   False,   True  ),
+        ("rdrs_count",                 'pos_int',   True,    True,    False ),
+        ("rdrs_disk_size",             'pos_int',   True,    True,    False ),
+        ("rdrs_instance_type",         'string',    True,    True,    False ),
+        ("rdrs_major_version",         'one_two',   False,   True,    True  ),
+        ("rdrs_private_ips",           'ip_list',   False,   False,   True  ),
+        ("rdrs_public_ips",            'ip_list',   False,   False,   True  ),
+        ("region",                     'string',    True,    True,    False ),
+        ("rondb_replicas",             'pos_int',   False,   True,    True  ),
+        ("rondb_version",              'string',    False,   True,    True  ),
+        ("ssh_key_file",               'string',    False,   False,   True  ),
+    ]
+    def ip_valid(ip):
+        try: ipaddress.ip_address(ip); return True
+        except ValueError: return False
+    validators = {
+        'pos_int': (lambda x: None if isinstance(x, int) and x > 0 else
+                    "must be a positive integer"),
+        'string': (lambda x: None if isinstance(x, str) and len(x) > 0 else
+                   "must be a nonempty string"),
+        'ip_list': (lambda x: None
+                    if isinstance(x, list)
+                    and all(isinstance(i, str) and ip_valid(i) for i in x)
+                    else "must be a list of valid IP addresses"),
+        'cpu_pl': (lambda x: None if x in ['arm64_v8', 'x86_64']
+                   else "must be either 'arm64_v8' or 'x86_64'"),
+        'one_two': (lambda x: None if x in [1, 2]
+                    else "must be either 1 or 2"),
+    }
+    @dataclass(slots=True, frozen=True)
+    class ConfigVar:
+        validate: callable
+        TF: bool
+        AWS: bool
+        static: bool
+    return {name: ConfigVar(validators[validator_name], *rest)
+            for [name, validator_name, *rest] in config_variables}
+
+trueColor = not ('TERM_PROGRAM' in os.environ and
+                 'Apple_Terminal' in os.environ['TERM_PROGRAM'])
+def node_color(r, g, b, i): return "38;5;16;48;" + (
+    f"2;{r};{g};{b}" if trueColor else f"5;{i}")
 node_types = [
-    ("ndb_mgmd",   1,                       "48;2;21;149;230;38;5;16"),
-    ("ndbmtd",     1,                       "48;2;3;193;148;38;5;16"),
-    ("mysqld",     NUM_CLUSTER_CONN_MYSQLD, "48;2;255;227;71;38;5;16"),
-    ("rdrs",       NUM_CLUSTER_CONN_RDRS,   "48;2;233;125;103;38;5;16"),
-    ("prometheus", 0,                       "48;2;178;141;248;38;5;16"),
-    ("grafana",    0,                       "48;2;239;161;248;38;5;16"),
-    ("bench",      NUM_CLUSTER_CONN_BENCH,  "48;2;255;178;75;38;5;16"),
+    #Node type,    number of NDB NodeIds,               R    G    B   256-color
+    ("ndb_mgmd",   1,                       node_color( 21, 149, 230,  32)),
+    ("ndbmtd",     1,                       node_color(  3, 193, 148,  42)),
+    ("mysqld",     NUM_CLUSTER_CONN_MYSQLD, node_color(255, 227,  71, 227)),
+    ("rdrs",       NUM_CLUSTER_CONN_RDRS,   node_color(233, 125, 103, 167)),
+    ("prometheus", 0,                       node_color(178, 141, 248, 141)),
+    ("grafana",    0,                       node_color(239, 161, 248, 212)),
+    ("bench",      NUM_CLUSTER_CONN_BENCH,  node_color(255, 178,  75, 215)),
 ]
-import sys
 stdout_is_tty=sys.stdout.isatty()
 def color(s, c, b=""): return f"\033[{c}m{b+s+b}\033[0m" if stdout_is_tty else s
 def red(s): return color(s, '1;31')
@@ -69,8 +111,8 @@ def all_nodes():
     nodes = []
     nodeid = 0
     for node_type, num_nodeids, clr in node_types:
-        public_ips = get_tf_output(f'{node_type}_public_ips')
-        private_ips = get_tf_output(f'{node_type}_private_ips')
+        public_ips = get_deploy_output(f'{node_type}_public_ips')
+        private_ips = get_deploy_output(f'{node_type}_private_ips')
         assert len(public_ips) == len(private_ips), "IP count mismatch"
         for i in range(len(public_ips)):
             nodes.append(Node(node_type,
@@ -130,26 +172,37 @@ def config():
     # Import config from ./config.py, validate and return
     import config as config_module
     c = config_module.config
-    for var in config_required_strings + config_required_ints:
+    if "deployment_type" not in c:
+        die("Config variable 'deployment_type' not found in config.py.")
+    dt = c['deployment_type']
+    if dt not in ["aws", "static"]:
+        die("Config variable 'deployment_type' must be either 'aws' or"
+            " 'static'.")
+    schema = config_schema()
+    included = {'aws': lambda x: x.AWS, 'static': lambda x: x.static}[dt]
+    included_vars = [ var for var in schema if included(schema[var]) ]
+    for var in c:
+        if var not in schema:
+            die(f"Unexpected variable '{var}' in config.py.")
+        if var not in included_vars:
+            die(f"Config variable '{var}' is not supported in deployment type"
+                f" '{dt}'.")
+    for var in included_vars:
         if var not in c:
             die(f"Config variable '{var}' not found in config.py.")
-        if var in config_required_strings and not (
-                isinstance(c[var], str) and c[var].strip()):
-            die(f"Config variable '{var}' must be a nonempty string in"
-                " config.py.")
-        if var in config_required_ints and not (
-                isinstance(c[var], int) and c[var] > 0):
-            die(f"Config variable '{var}' must be a positive integer in"
-                " config.py.")
-    if c['ndbmtd_count'] % c['rondb_replicas'] != 0:
-        die(f"Error: ndbmtd_count ({c['ndbmtd_count']}) must be divisible by"
-            " rondb_replicas ({c['rondb_replicas']}).")
-    if c['cpu_platform'] not in ['arm64_v8', 'x86_64']:
-        die(f"Error: cpu_platform must be either 'arm64_v8' or 'x86_64',"
-            f" but got '{c['cpu_platform']}' from config.py.")
-    for var in c:
-        if var not in config_required_strings + config_required_ints:
-            die(f"Unexpected variable '{var}' in config.py.")
+        req = schema[var].validate(c[var])
+        if req is not None:
+            die(f"Config variable '{var}' {req}.")
+    ndbmtd_count = (c['ndbmtd_count']
+                    if dt == "aws" else len(c['ndbmtd_public_ips']))
+    if ndbmtd_count % c['rondb_replicas'] != 0:
+        die(f"Config variable 'ndbmtd_count' ({c['ndbmtd_count']}) must be"
+            f" divisible by rondb_replicas ({c['rondb_replicas']}).")
+    if dt == "static" and len(c['rdrs_public_ips']) > 1:
+        # In order to support multiple rdrs nodes in static deployment, we need
+        # to add load balancers and config variables rdrs_nlb_dns and
+        # rondis_nlb_dns.
+        die("Error: Static deployment does not support multiple RDRS nodes.")
     return c
 def get_config(var_name):
     c = config()
@@ -157,7 +210,7 @@ def get_config(var_name):
         return c[var_name]
     die(f"Error: config variable '{var_name}' not found.")
 
-# Terraform outputs
+# Deploy outputs
 has_read_tf_output = False
 @cache
 def tf_output():
@@ -170,34 +223,55 @@ def tf_output():
     if not (tf_output_file.exists() and
             state_file.exists() and
             state_file.stat().st_mtime < tf_output_file.stat().st_mtime):
-        proc = subprocess.run("terraform output -json > tf_output", shell=True)
+        proc = subprocess.run("terraform output -json > tf_output",
+                              shell=True,
+                              check=False)
         if proc.returncode != 0:
             die(f"Error running terraform output: {proc.stdout + proc.stderr}")
     has_read_tf_output = True
-    return json.loads(tf_output_file.read_text())
-def get_tf_output(output_name):
-    return tf_output()[output_name]['value']
+    return json.loads(tf_output_file.read_text(encoding='utf-8'))
+def get_deploy_output(output_name):
+    if output_name == "workspace":
+        return f"/home/{get_deploy_output('node_user')}/workspace"
+    if output_name == "run_dir":
+        return f"{get_deploy_output('workspace')}/rondb-run"
+    if output_name == "durable_dir":
+        return f"/home/{get_deploy_output('node_user')}/durable"
+    dt = get_config('deployment_type')
+    if dt == "aws":
+        if output_name == "node_user":
+            return "ubuntu"
+        if output_name == "ssh_key_file":
+            return f"{get_aws_key_name()}.pem"
+        return tf_output()[output_name]['value']
+    assert dt == "static"
+    if output_name in config():
+        return get_config(output_name)
+    die(f"Bug: Don't know how to get deploy output '{output_name}'.")
 
 @cache
-def get_gui_secret():
-    secret_file = Path("gui_secret.txt")
+def get_rnd_cache():
+    secret_file = Path("secrets.json")
     if not secret_file.exists():
-        secret = os.urandom(10).hex()
-        secret_file.write_text(secret)
-    return secret_file.read_text().strip()
+        secret_file.write_text(
+            json.dumps({
+                "gui_secret": os.urandom(10).hex(),
+                "unique_suffix": os.urandom(8).hex(),
+            }),
+            encoding='utf-8')
+    return json.loads(secret_file.read_text(encoding='utf-8'))
 
-@cache
-def get_unique_suffix():
-    us_file = Path("unique_suffix.txt")
-    if not us_file.exists():
-        us = os.urandom(8).hex()
-        us_file.write_text(us)
-    return us_file.read_text().strip()
-
-def get_key_name(): return f"rondb_bench_key_{get_unique_suffix()}"
+def get_gui_secret(): return get_rnd_cache()["gui_secret"]
+def get_unique_suffix(): return get_rnd_cache()["unique_suffix"]
+def get_aws_key_name():
+    if get_config('deployment_type') == "static":
+        die("Bug")
+    return f"rondb_bench_key_{get_unique_suffix()}"
 
 # Util functions
-def w(name, *content): Path(name).write_text("\n".join(content) + "\n")
+def w(name, *content):
+    Path(name).write_text("\n".join(content) + "\n",
+                          encoding='utf-8')
 def mkdir(p): Path(p).mkdir(parents=True, exist_ok=True)
 
 # Generate ./config_files
@@ -206,32 +280,46 @@ def generate_config_files():
     shutil.rmtree("config_files", ignore_errors=True)
     mkdir("config_files")
     # Extract some values
-    USER="ubuntu"
-    WORKSPACE=f"/home/{USER}/workspace"
-    CONFIG_FILES=f"/home/{USER}/config_files"
-    RUN_DIR=f"{WORKSPACE}/rondb-run"
+    NODE_USER = get_deploy_output('node_user')
+    WORKSPACE = get_deploy_output('workspace')
+    RUN_DIR = get_deploy_output('run_dir')
+    DURABLE_DIR = get_deploy_output('durable_dir')
+    CONFIG_FILES=f"/home/{NODE_USER}/config_files"
     NDB_MGMD_PRI = first('ndb_mgmd').private_ip
     NO_OF_REPLICAS = get_config('rondb_replicas')
-    NUM_AZS = get_config('num_azs')
     RONDB_VERSION = get_config('rondb_version')
     GLIBC_VERSION = get_config('glibc_version')
     CPU_PLATFORM = get_config('cpu_platform')
     TARBALL_NAME = f"rondb-{RONDB_VERSION}-linux-glibc{GLIBC_VERSION}-{CPU_PLATFORM}.tar.gz"
+    RDRS_IP= (get_deploy_output('rdrs_nlb_dns')
+              if node_count('rdrs') > 1
+              else first('rdrs').private_ip)
+    RONDIS_IP= (get_deploy_output('rondis_nlb_dns')
+                if node_count('rdrs') > 1
+                else first('rdrs').private_ip)
+    GUI_SECRET = get_gui_secret()
     # Generate shell_vars
+    shell_vars = {
+        "NODE_USER": NODE_USER,
+        "WORKSPACE": WORKSPACE,
+        "CONFIG_FILES": CONFIG_FILES,
+        "RUN_DIR": RUN_DIR,
+        "DURABLE_DIR": DURABLE_DIR,
+        "NGINX_ERROR_LOG": f"{RUN_DIR}/nginx/nginx_error.log",
+        "TARBALL_NAME": TARBALL_NAME,
+        "NDB_MGMD_PRI": NDB_MGMD_PRI,
+        "MYSQLD_PUB_1": first('mysqld').public_ip,
+        "MYSQLD_PRI_1": first('mysqld').private_ip,
+        "RDRS_URI": f"http://{RDRS_IP}:4406",
+        "RONDIS_LB": f"{RONDIS_IP}:6379",
+        "RDRS_PRI_1": first('rdrs').private_ip,
+        "RDRS_MAJOR_VERSION": f"{get_config('rdrs_major_version')}",
+        "BENCH_PRI_1": first('bench').private_ip,
+        "GRAFANA_PRI_1": first('grafana').private_ip,
+        "GUI_SECRET": GUI_SECRET,
+    }
     w("config_files/shell_vars",
-      f"USER={USER}",
-      f"WORKSPACE={WORKSPACE}",
-      f"CONFIG_FILES={CONFIG_FILES}",
-      f"RUN_DIR={RUN_DIR}",
-      f"TARBALL_NAME={TARBALL_NAME}",
-      f"NUM_AZS={NUM_AZS}",
-      f"NDB_MGMD_PRI={NDB_MGMD_PRI}",
-      f"MYSQLD_PUB_1={first('mysqld').public_ip}",
-      f"RDRS_LB=http://{get_tf_output('rdrs_nlb_dns')}:4406",
-      f"RONDIS_LB={get_tf_output('rondis_nlb_dns')}:6379",
-      f"RDRS_PRI_1={first('rdrs').private_ip}",
-      f"BENCH_PRI_1={first('bench').private_ip}",
-      )
+      *[f"export {var}={value}" for var, value in shell_vars.items()])
     # Generate config.ini
     configini = [
         "[NDB_MGMD DEFAULT]",
@@ -265,8 +353,11 @@ def generate_config_files():
                 f"# {node.name()}",
                 f"HostName={node.private_ip}",
                 f"NodeId={nodeid}",
-                f"LocationDomainId={(node.idx % NUM_AZS) + 1}"
             ]
+            if get_config('deployment_type') == "aws":
+                configini += [
+                    f"LocationDomainId={(node.idx % get_config('num_azs')) + 1}"
+                ]
     w("config_files/config.ini", *configini)
     # Generate my.cnf
     w("config_files/my.cnf",
@@ -279,7 +370,7 @@ def generate_config_files():
         "log_error_verbosity=3",
         "",
         "[mysql_cluster]",
-        f"ndb-connectstring={NDB_MGMD_PRI}",
+        f"ndb-connectstring={NDB_MGMD_PRI}:1186",
       )
     for node in all_nodes():
         w(f"config_files/nodeinfo_{node.name()}",
@@ -289,39 +380,59 @@ def generate_config_files():
           )
     # Generate rdrs_*.json
     for node in nodes_of_type("rdrs"):
-        w(f"config_files/rdrs_{node.idx}.json",
-          json.dumps({
-              "RonDB": {
-                  "Mgmds": [{"IP": NDB_MGMD_PRI}],
-                  "ConnectionPoolSize": 2,
-                  "NodeIDs": node.ndb_nodeids,
-              },
-              "REST": {
-                  "NumThreads": 64,
-                  "UseCompression": False,
-                  "UseSingleTransaction": False,
-              },
-              "Rondis": {
-                  "Enable": True,
-                  "NumThreads": 32,
-                  "NumDatabases": 2,
-                  "Databases": [
-                      {
-                          "Index": 0,
-                          "FastHCOUNT": True,
-                      },
-                      {
-                          "Index": 1,
-                          "FastHCOUNT": False,
-                      },
-                  ],
-              },
-              "Security": {
-                  "APIKey": {
-                      "UseHopsworksAPIKeys": False,
-                  },
-              },
-          }, indent=4))
+        rdrs_conf = {
+            "RonDB": {
+                "Mgmds": [{"IP": NDB_MGMD_PRI}],
+                "ConnectionPoolSize": len(node.ndb_nodeids),
+                "NodeIDs": node.ndb_nodeids,
+            },
+            "REST": {
+                "NumThreads": 64,
+                "UseCompression": False,
+                "UseSingleTransaction": False,
+            },
+            "Rondis": {
+                "Enable": True,
+                "NumThreads": 32,
+                "NumDatabases": 2,
+                "Databases": [
+                    {
+                        "Index": 0,
+                        "FastHCOUNT": True,
+                    },
+                    {
+                        "Index": 1,
+                        "FastHCOUNT": False,
+                    },
+                ],
+            },
+            "Security": {
+                "InsecureAllowAll": True,
+                "APIKey": {
+                    "UseHopsworksAPIKeys": False,
+                },
+            },
+        }
+        if get_config('rdrs_major_version') == 1:
+            # rdrs 1 does not support more than one data connection. Also, it
+            # uses different connections for RonDB and RonDBMetadataCluster even
+            # if they are configured identically. Therefore, they must be
+            # configured with different (or no) node IDs.
+            assert len(node.ndb_nodeids) == 2
+            [data_nodeid, metadata_nodeid] = node.ndb_nodeids
+            rdrs_conf["RonDB"]["ConnectionPoolSize"] = 1
+            rdrs_conf["RonDB"]["NodeIDs"] = [data_nodeid]
+            rdrs_conf["RonDBMetadataCluster"] = {
+                "Mgmds": [{"IP": NDB_MGMD_PRI, "Port": 1186}],
+                "ConnectionPoolSize": 1,
+                "NodeIDs": [metadata_nodeid],
+            }
+            # rdrs 1 has GRPC enabled by default, let's turn it off
+            rdrs_conf["GRPC"] = { "Enable": False }
+            # rdrs 1 REST does not default to port 4406, despite documentation
+            # claiming so.
+            rdrs_conf["REST"]["ServerPort"] = 4406
+        w(f"config_files/rdrs_{node.idx}.json", json.dumps(rdrs_conf, indent=4))
     # Generate prometheus.yml
     prometheus_yml = [
         "global:",
@@ -372,9 +483,12 @@ def generate_config_files():
       "disable_login_form = true",
       "[auth.anonymous]",
       "enabled = true",
-      "org_role = Admin",
+      "org_role = Editor",
+      "[server]",
+      f"root_url = http://{first('bench').public_ip}:8080/grafana/",
+      "serve_from_sub_path = true",
       "[live]",
-      f"allowed_origins = http://{first('grafana').public_ip}:8080",
+      f"allowed_origins = http://{first('bench').public_ip}:8080",
       )
     w("config_files/grafana/datasources/prometheus.yaml",
       "apiVersion: 1",
@@ -410,48 +524,79 @@ def generate_config_files():
       )
     shutil.copytree("dashboards", "config_files/grafana/dashboards",
                     dirs_exist_ok=True)
-    # nginx config for grafana and locust. This implements a simple cookie-based
-    # authentication. An unauthenticated user receives 403 for all requests
-    # except /secret/path, which will set the authentication cookie and redirect
+    for f in Path("config_files/grafana/dashboards").glob(
+            {1: "rdrs2*.json", 2: "rdrs1*.json"}[
+                get_config('rdrs_major_version')]):
+        f.unlink()
+    # nginx config to expose grafana and locust on the first bench
+    # node. This implements a simple cookie-based authentication. An
+    # unauthenticated user receives 403 for all requests except
+    # /secret=SECRET/path, which will set the authentication cookie and redirect
     # to /path.
-    gui_secret = get_gui_secret()
-    for config_file_name, service_port in [("nginx_grafana.conf", 3000),
-                                           ("nginx_locust.conf", 8089)]:
-        w(f"config_files/{config_file_name}",
-          f'error_log {RUN_DIR}/nginx/nginx_error.log error;',
-          f'pid {RUN_DIR}/nginx/nginx.pid;',
-          'events {',
-          '  worker_connections 4096;',
-          '}',
-          'http {',
-          '  map $http_upgrade $connection_upgrade {',
-          '    default upgrade;',
-          '    ""      close;',
-          '  }',
-          f'  client_body_temp_path {RUN_DIR}/nginx/client_temp;',
-          f'  proxy_temp_path       {RUN_DIR}/nginx/proxy_temp;',
-          f'  fastcgi_temp_path     {RUN_DIR}/nginx/fastcgi_temp;',
-          f'  uwsgi_temp_path       {RUN_DIR}/nginx/uwsgi_temp;',
-          f'  scgi_temp_path        {RUN_DIR}/nginx/scgi_temp;',
-          '  server {',
-          f'    access_log {RUN_DIR}/nginx/nginx_access.log;',
-          '    listen 8080;',
-          f'    location ~ ^/{gui_secret}(/.*)$ {{',
-          f'      add_header Set-Cookie "X-AUTH={gui_secret}; Path=/";',
-          '      return 302 $1;',
-          '    }',
-          '    location / {',
-          f'      if ($http_cookie !~* "X-AUTH={gui_secret}") {{',
-          '        return 403;',
-          '      }',
-          '      proxy_http_version 1.1;',
-          '      proxy_set_header Upgrade $http_upgrade;',
-          '      proxy_set_header Connection $connection_upgrade;',
-          f'      proxy_pass http://localhost:{service_port};',
-          '    }',
-          '  }',
-          '}',
-          )
+    w("config_files/nginx.conf",
+      f'pid {RUN_DIR}/nginx/nginx.pid;',
+      # For forwarding, worker_rlimit_nofile = worker_connections * 2 FDs
+       'worker_rlimit_nofile 8192;',
+       'events {',
+       '  worker_connections 4096;',
+       '}',
+       'http {',
+       '  map $http_upgrade $connection_upgrade {',
+       '    ""      close;',
+       '    default upgrade;',
+       '  }',
+       '  map $http_cookie $gui_secret {',
+       '      "~X-AUTH=([^;]+)" $1;',
+       '      default "";',
+       '  }',
+      f'  include {CONFIG_FILES}/nginx-dynamic.conf;',
+      f'  client_body_temp_path {RUN_DIR}/nginx/client_temp;',
+      f'  proxy_temp_path       {RUN_DIR}/nginx/proxy_temp;',
+      f'  fastcgi_temp_path     {RUN_DIR}/nginx/fastcgi_temp;',
+      f'  uwsgi_temp_path       {RUN_DIR}/nginx/uwsgi_temp;',
+      f'  scgi_temp_path        {RUN_DIR}/nginx/scgi_temp;',
+       '  server {',
+      f'    access_log {RUN_DIR}/nginx/nginx_access.log;',
+       '    listen 8080;',
+       '    location ~ ^/secret=([0-9a-f]+)(/.*)$ {',
+       '      add_header Set-Cookie "X-AUTH=$1; Path=/";',
+       '      return 302 $2;',
+       '    }',
+       '    location /grafana {',
+       '      if ($grafana_access = 0) {',
+       '        return 403;',
+       '      }',
+       '      proxy_http_version 1.1;',
+       '      proxy_set_header Upgrade $http_upgrade;',
+       '      proxy_set_header Connection $connection_upgrade;',
+      f'      proxy_pass http://{first("grafana").private_ip}:3000;',
+       '    }',
+       '    location /locust/ {',
+       '      if ($locust_http_port = 0) {',
+       '        return 403;',
+       '      }',
+       '      proxy_http_version 1.1;',
+       '      proxy_set_header Upgrade $http_upgrade;',
+       '      proxy_set_header Connection $connection_upgrade;',
+       '      rewrite ^/locust/(.*)$ /$1 break;',
+       '      proxy_pass http://127.0.0.1:$locust_http_port;',
+       '    }',
+       '    location / {',
+       '      return 404;',
+       '    }',
+       '  }',
+       '}',
+      )
+    w("config_files/nginx-dynamic.conf",
+       'map $gui_secret $grafana_access {',
+      f'    "{GUI_SECRET}" 1;',
+       '    default 0;',
+       '}',
+       'map $gui_secret $locust_http_port {',
+      f'    "{GUI_SECRET}" 8089;',
+       '    default 0;',
+       '}',
+      )
 
 # Parallell processing and TUI
 failed = False
@@ -493,8 +638,24 @@ def stream_process(cmd, prefix, check=False):
     if check: check_failed()
 def update_status(node):
     proc = subprocess.run(ssh(node, 'bash ~/scripts/status.sh'),
-                          capture_output=True, text=True)
+                          capture_output=True,
+                          text=True,
+                          check=False)
     node.status = proc.stdout.strip() if proc.returncode == 0 else None
+def connectivity_check(node):
+    global failed
+    attempts = 12
+    wait_time = 5
+    for attempt in range(attempts):
+        proc = subprocess.run(ssh(node, 'echo OK'),
+                              capture_output=True, text=True)
+        if proc.returncode == 0 and proc.stdout.strip() == 'OK':
+            return
+        if attempt < attempts - 1:
+            print(f"{node.tui_name()} Connectivity check {attempt + 1} {red('failed')}, waiting {wait_time} seconds before trying again...")
+            time.sleep(wait_time)
+    print(f"{node.tui_name()} Connectivity check {red('failed')} {attempts} times, giving up.")
+    failed = True
 # Allow up to 10 concurrent rsync processes to upload config files to nodes
 upload_lock = threading.Semaphore(10)
 # Allow up to 2 nodes to download from repo.hops.works concurrently
@@ -504,10 +665,12 @@ UNLOCK_REPO = 2
 LOCK_UPLOAD = 3
 UNLOCK_UPLOAD = 4
 UPDATE_STATUS = 5
+CONNECTIVITY_CHECK = 6
 def run_for_one_node(node, cmdfun):
     cmds = cmdfun(node)
     for cmd in cmds:
-        if cmd == LOCK_UPLOAD: upload_lock.acquire()
+        if cmd == CONNECTIVITY_CHECK: connectivity_check(node)
+        elif cmd == LOCK_UPLOAD: upload_lock.acquire()
         elif cmd == UNLOCK_UPLOAD: upload_lock.release()
         elif cmd == LOCK_REPO: repo_lock.acquire()
         elif cmd == UNLOCK_REPO: repo_lock.release()
@@ -521,44 +684,50 @@ def run_for_all(for_nodes, cmdfun):
     check_failed()
 def ssh_opts():
     return [
-        "-i", f"{get_key_name()}.pem",
+        "-i", get_deploy_output('ssh_key_file'),
         "-o", "StrictHostKeyChecking=no",
         "-q"]
 def ssh(node, cmd=""):
-    return ["ssh", *ssh_opts(), f"{USER}@{node.public_ip}",
+    NODE_USER = get_deploy_output('node_user')
+    return ["ssh", *ssh_opts(), f"{NODE_USER}@{node.public_ip}",
             *([] if cmd=="" else [cmd])]
 def rsync(file, node):
+    NODE_USER = get_deploy_output('node_user')
     return ["rsync", "-az", "--delete", "-e", f"ssh {' '.join(ssh_opts())}",
-            file, f"{USER}@{node.public_ip}:"]
+            file, f"{NODE_USER}@{node.public_ip}:"]
 
 # deploy command
 def do_deploy(expr):
-    do_terraform()
+    if get_config('deployment_type') == "aws":
+        do_terraform()
     for_nodes = nodes_from_expression(expr)
     do_install(for_nodes)
     do_start_cluster(for_nodes)
 
 # terraform command
 def do_terraform():
+    if get_config('deployment_type') != "aws":
+        die("Error: 'terraform' command is only supported for AWS deployment.")
     if has_read_tf_output:
         die("Bug: Called do_terraform() after tf_output()")
     # Generate ./terraform.tfvars
+    schema = config_schema()
+    var_repr = lambda x: f'"{x}"' if isinstance(x, str) else f'{x}'
     w("terraform.tfvars",
-      *[f'{var}="{get_config(var)}"' for var in config_required_strings
-        if var not in config_vars_not_in_tfvars],
-      *[f'{var}={get_config(var)}' for var in config_required_ints
-        if var not in config_vars_not_in_tfvars],
-      f'key_name="{get_key_name()}"',
+      *[f'{var}={var_repr(get_config(var))}'
+        for var in schema
+        if schema[var].TF],
+      f'key_name="{get_aws_key_name()}"',
       f'unique_suffix="{get_unique_suffix()}"',
       )
-    # Create AWS SSH key pair and save to a .pem file, unless it already exists.
-    key_name=get_key_name()
-    key_file=Path(f"{key_name}.pem")
+    # Create AWS SSH key pair and save to file, unless it already exists.
+    key_name=get_aws_key_name()
+    key_file=Path(get_deploy_output('ssh_key_file'))
     if not key_file.exists():
         print(f"Creating key pair {key_name}...")
         subprocess.run(f"aws ec2 create-key-pair --key-name {key_name}"
                        f" --key-type ed25519 --region {get_config('region')}"
-                       f" --query KeyMaterial --output text > {key_name}.pem",
+                       f" --query KeyMaterial --output text > {key_file}",
                        shell=True, check=True)
         key_file.chmod(0o600)
     if not key_file.exists() or key_file.stat().st_size == 0:
@@ -566,11 +735,13 @@ def do_terraform():
     # Initialize terraform if necessary
     if not Path(".terraform").exists():
         print("Running terraform init...")
-        if subprocess.run(["terraform", "init"]).returncode != 0:
+        if subprocess.run(["terraform", "init"], check=False).returncode != 0:
             die("'terraform init' failed.")
         print("Terraform initialized successfully.")
     # terraform apply
-    if subprocess.run(["terraform", "apply"]).returncode != 0:
+    if subprocess.run(["terraform", "apply", "-auto-approve"],
+                      check=False
+                      ).returncode != 0:
         die("'terraform apply' failed.")
 
 # install command
@@ -581,12 +752,18 @@ def do_install(for_nodes):
     for node in for_nodes:
         print(f"{node.tui_name()} -> {node.private_ip} / {node.public_ip}")
     print("--------------------------------------------------")
-    print("Press Ctrl+C within 3 seconds to abort.")
-    time.sleep(3)
     print("Installing...")
     run_for_all(for_nodes, lambda node: [
-        ssh(node, "sudo apt-get update -y"),
-        ssh(node, "sudo apt-get install -y rsync libncurses6"),
+        CONNECTIVITY_CHECK,
+        ssh(node,
+            "if [ -f /tmp/rsync-installed ]; then "
+            "  :; "
+            "else "
+            "  sudo DEBIAN_FRONTEND=noninteractive apt-get update -yq && "
+            "  sudo DEBIAN_FRONTEND=noninteractive "
+            "    apt-get install -yq rsync libncurses6; "
+            "fi && "
+            "touch /tmp/rsync-installed"),
         LOCK_UPLOAD,
         rsync("./scripts", node),
         rsync("./config_files", node),
@@ -604,22 +781,21 @@ def do_start_cluster(for_nodes):
     do_stop_cluster(for_nodes)
     print_uri = False
     for start_type, _, _ in node_types:
-        if start_type == "bench": continue
         nodes_this_iteration = [n for n in for_nodes if n.type == start_type]
         count = len(nodes_this_iteration)
         if count == 0: continue
-        if start_type == "grafana": print_uri = True
-        print("Waiting 2 seconds before starting services on the" +
+        if start_type == "bench": print_uri = True
+        print("Starting services on the" +
               (f" {count} " if count>1 else " ") +
               color(start_type, first(start_type).clr, " ") +
               f" node{'s' if count>1 else ''}...")
-        time.sleep(2)
         run_for_all(nodes_this_iteration, lambda node: [
             ssh(node, f"bash ~/scripts/start_{node.type}.sh")
         ])
     if print_uri:
-        uri=lnk(f"http://{first('grafana').public_ip}:8080"
-                f"/{get_gui_secret()}/d/rdrs")
+        uri=lnk(f"http://{first('bench').public_ip}:8080"
+                f"/secret={get_gui_secret()}/grafana/d"
+                f"/rdrs{get_config('rdrs_major_version')}_overview")
         print(f'Go to {uri} in your browser to see the dashboard.')
 
 # stop command
@@ -630,6 +806,8 @@ def do_stop_cluster(for_nodes):
 
 # open_tmux command
 def do_open_tmux(for_nodes):
+    WORKSPACE = get_deploy_output('workspace')
+    RUN_DIR = get_deploy_output('run_dir')
     if not shutil.which("tmux"):
         die("tmux is not installed.")
     def tmux(*args, check=True, **kwargs):
@@ -643,7 +821,7 @@ def do_open_tmux(for_nodes):
             tmux("new-window", "-t", session_name, "-n", name, *ssh(node))
             line=f"cd {RUN_DIR}/{node.type}"
             if node.type == "bench":
-                line=f"cd {RUN_DIR}; source locust/bin/activate"
+                line=f"cd {RUN_DIR}"
             if node.type == "mysqld":
                 line=f"cd {RUN_DIR}/{node.type}; alias mysql=\"{WORKSPACE}/rondb/bin/mysql -uroot\""
             tmux("send-keys", "-t", f"{session_name}:{name}", line, "C-m")
@@ -654,20 +832,24 @@ def do_open_tmux(for_nodes):
 def do_ssh(nodename, *cmd):
     for node in all_nodes():
         if not node.name() == nodename: continue
-        exit(subprocess.run(ssh(node, ' '.join(cmd))).returncode)
+        exit(subprocess.run(ssh(node, ' '.join(cmd)),
+                            check=False
+                            ).returncode)
     die("Could not find a node by that name. Try ./cluster_ctl list")
 
 # kill_tmux command
 def do_kill_tmux():
     if not shutil.which("tmux"):
         die("tmux is not installed.")
-    if not Path("unique_suffix.txt").exists():
-        # Avoid creating unique_suffix.txt unnecessarily.
+    if not Path("secrets.json").exists():
+        # Avoid creating secrets.json unnecessarily.
         print("No tmux session to delete.")
         return
     session_name = f"rondb_bm {get_unique_suffix()}"
     if subprocess.run(["tmux", "has-session", "-t", session_name],
-                      capture_output=True).returncode != 0:
+                      capture_output=True,
+                      check=False
+                      ).returncode != 0:
         print("No tmux session to delete.")
         return
     print(f"Deleting tmux session '{session_name}'.")
@@ -697,6 +879,7 @@ def do_populate(columns, rows, column_types):
         ssh(node, f"bash ~/scripts/populate_locust.sh {columns} {rows}" +
             f" {batch_size} {column_info}")
     ])
+    check_failed()
 
 # start_locust command
 def do_start_locust(rows, total_workers, only_validate=False):
@@ -704,7 +887,7 @@ def do_start_locust(rows, total_workers, only_validate=False):
     if rows < 1 or 1000000000 < rows:
         die("NUM_ROWS must be in the range 1 - 1,000,000,000")
     num_bench_nodes = node_count("bench")
-    cpus_per_node = get_tf_output('bench_cpus_per_node')
+    cpus_per_node = get_deploy_output('bench_cpus_per_node')
     cpus = num_bench_nodes * cpus_per_node
     max_workers = cpus - 1 # Reserve one CPU for master
     min_workers = max(1, num_bench_nodes - 1)
@@ -726,7 +909,7 @@ def do_start_locust(rows, total_workers, only_validate=False):
                      f" {num_workers}") ]
     run_for_all(nodes_of_type("bench"), cmdfun)
     # Print URI
-    uri=lnk(f"http://{first('bench').public_ip}:8080/{get_gui_secret()}/")
+    uri=lnk(f"http://{first('bench').public_ip}:8080/secret={get_gui_secret()}/locust")
     print(f"Go to {uri} in your browser to start the benchmark")
 
 # stop_locust command
@@ -762,20 +945,22 @@ def do_list():
                        for i, s in enumerate(row)).rstrip())
 
 # cleanup command
-def do_cleanup():
+def cleanup_aws():
     # Destroy terraform cluster if it exists
     state_file = Path("terraform.tfstate")
     if state_file.exists():
         print("Destroying terraform cluster.")
-        if subprocess.run(["terraform", "destroy"]).returncode != 0:
+        if subprocess.run(["terraform", "destroy", "-auto-approve"],
+                          check=False,
+                          ).returncode != 0:
             die("'terraform destroy' failed.")
         print("Done destroying terraform cluster.")
     else:
         print("Skip 'terraform destroy' since there is no terraform.tfstate"
               " file.")
     # Destroy AWS SSH key pair if it exists
-    key_name=get_key_name()
-    key_file=Path(f"{key_name}.pem")
+    key_name=get_aws_key_name()
+    key_file=Path(get_deploy_output('ssh_key_file'))
     if key_file.exists():
         print("Deleting AWS SSH key.")
         subprocess.run(["aws", "ec2", "delete-key-pair",
@@ -786,23 +971,33 @@ def do_cleanup():
         print("Done deleting AWS SSH key.")
     else:
         print("No AWS SSH key to delete.")
+    cleanup_common()
+def cleanup_static():
+    cleanup_common()
+    print("Cannot destroy nodes, since they are provided statically. You'll have to do that manually.")
+def cleanup_common():
     if shutil.which("tmux"):
         do_kill_tmux()
     print("Deleting temporary files.")
     subprocess.run("rm -rf .terraform* terraform.* tf_output config_files"
-                   " __pycache__ gui_secret.txt unique_suffix.txt",
+                   " __pycache__ secrets.json",
                    shell=True, check=True)
     print("Done deleting temporary files.")
+def do_cleanup():
+    {
+        "aws": cleanup_aws,
+        "static": cleanup_static,
+    }[get_config('deployment_type')]()
 
 # CLI
-if __name__ == "__main__":
+def main():
     argc = len(sys.argv)
     node_type_names = [x[0] for x in node_types]
     if argc < 2:
         print('\n'.join([
             "Usage:",
             "  ./cluster_ctl deploy [NODES]",
-            "    Configure, initialize and apply terraform, as needed. Then install and start",
+            "    Configure, initialize and apply terraform, if needed. Then install and start",
             "    RonDB services.",
             "      NODES: See bottom.",
             "",
@@ -865,7 +1060,7 @@ if __name__ == "__main__":
             "    List node information.",
             "",
             "  ./cluster_ctl cleanup",
-            "    Destroy AWS resources and delete temporary files and tmux session.",
+            "    Destroy AWS resources (if any) and delete temporary files and tmux session.",
             "",
             "NODES: A comma-separated list of node names and node types. If given, operate",
             "       only on matching nodes, otherwise on all nodes. Available node types are:",
@@ -890,7 +1085,11 @@ if __name__ == "__main__":
         if argc < 3:
             die("Usage: ./cluster_ctl ssh NODE_NAME [COMMAND ...]")
         do_ssh(*sys.argv[2:])
-    elif action in ["terraform", "kill_tmux", "stop_locust", "list", "cleanup"]:
+    elif action in ["terraform",
+                    "kill_tmux",
+                    "stop_locust",
+                    "list",
+                    "cleanup"]:
         if argc != 2:
             die(f"Usage: ./cluster_ctl {action}")
         if action == "terraform": do_terraform()
@@ -934,3 +1133,6 @@ if __name__ == "__main__":
             do_start_locust(rows, total_workers)
         else: die("Bug")
     else: die(f"Unknown action: {action}")
+
+if __name__ == "__main__":
+    main()

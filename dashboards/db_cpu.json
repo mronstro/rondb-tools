@@ -12,6 +12,12 @@
   "__elements": [],
   "__requires": [
     {
+      "type": "panel",
+      "id": "gauge",
+      "name": "Gauge",
+      "version": ""
+    },
+    {
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
@@ -52,7 +58,7 @@
       }
     ]
   },
-  "description": "NDB thread monitoring dashboard",
+  "description": "NDB CPU monitoring dashboard",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -117,11 +123,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} System Time",
+          "legendFormat": "{{ threadName }} Execute",
           "refId": "A"
         },
         {
@@ -129,17 +135,41 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\"}[60s])/10000)\n",
+          "expr": "sum by (threadName)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} User Time",
+          "legendFormat": "{{ threadName }} Sleep",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum by (threadName)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\"})",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Send",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum by (threadName)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\"})",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Spin",
+          "refId": "D"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Thread stats",
+      "title": "CPU stats",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -223,11 +253,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"ldm\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\",threadName=\"ldm\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} System Time",
+          "legendFormat": "{{ threadName }} Execute",
           "refId": "A"
         },
         {
@@ -235,11 +265,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"ldm\"}[60s])/10000)\n",
+          "expr": "sum by (threadName)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=\"ldm\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} User Time",
+          "legendFormat": "{{ threadName }} Sleep",
           "refId": "B"
         },
         {
@@ -247,15 +277,29 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"ldm\"}[60s])/10000)+sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"ldm\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=\"ldm\"})",
+          "format": "time_series",
           "interval": "",
-          "legendFormat": "{{threadName}} Total",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Send",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum by (threadName)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\",threadName=\"ldm\"})",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Spin",
+          "refId": "D"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "LDM thread stats",
+      "title": "LDM CPU stats",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -339,11 +383,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"recv\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\",threadName=~\".*recv.*\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} System Time",
+          "legendFormat": "{{ threadName }} Execute",
           "refId": "A"
         },
         {
@@ -351,11 +395,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"recv\"}[60s])/10000)\n",
+          "expr": "sum by (threadName)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=~\".*recv.*\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} User Time",
+          "legendFormat": "{{ threadName }} Sleep",
           "refId": "B"
         },
         {
@@ -363,15 +407,29 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"recv\"}[60s])/10000)+sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"recv\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=~\".*recv.*\"})",
+          "format": "time_series",
           "interval": "",
-          "legendFormat": "{{threadName}} Total",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Send",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum by (threadName)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\",threadName=~\".*recv.*\"})",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Spin",
+          "refId": "D"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "recv thread stats",
+      "title": "recv CPU stats",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -455,11 +513,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"tc\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\",threadName=\"tc\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} System Time",
+          "legendFormat": "{{ threadName }} Execute",
           "refId": "A"
         },
         {
@@ -467,11 +525,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"tc\"}[60s])/10000)\n",
+          "expr": "sum by (threadName)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=\"tc\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} User Time",
+          "legendFormat": "{{ threadName }} Sleep",
           "refId": "B"
         },
         {
@@ -479,15 +537,29 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"tc\"}[60s])/10000)+sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"tc\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=\"tc\"})",
+          "format": "time_series",
           "interval": "",
-          "legendFormat": "{{threadName}} Total",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Send",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum by (threadName)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\",threadName=\"tc\"})",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Spin",
+          "refId": "D"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "TC thread stats",
+      "title": "TC CPU stats",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -571,11 +643,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"rep\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\",threadName=\"rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} System Time",
+          "legendFormat": "{{ threadName }} Execute",
           "refId": "A"
         },
         {
@@ -583,11 +655,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"rep\"}[60s])/10000)\n",
+          "expr": "sum by (threadName)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=\"rep\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} User Time",
+          "legendFormat": "{{ threadName }} Sleep",
           "refId": "B"
         },
         {
@@ -595,15 +667,29 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"rep\"}[60s])/10000)+sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"rep\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=\"rep\"})",
+          "format": "time_series",
           "interval": "",
-          "legendFormat": "{{threadName}} Total",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Send",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum by (threadName)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\",threadName=\"rep\"})",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Spin",
+          "refId": "D"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "rep thread stats",
+      "title": "rep CPU stats",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -687,11 +773,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"main\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_exec_percentage{nodeID=\"$nodeID\",threadName=~\".*main.*\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} System Time",
+          "legendFormat": "{{ threadName }} Execute",
           "refId": "A"
         },
         {
@@ -699,11 +785,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"main\"}[60s])/10000)\n",
+          "expr": "sum by (threadName)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=~\".*main.*\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{ threadName }} User Time",
+          "legendFormat": "{{ threadName }} Sleep",
           "refId": "B"
         },
         {
@@ -711,15 +797,137 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum by (threadName)(rate(ndb_ndbinfo_threadstat_system_time{nodeID=\"$nodeID\",threadName=\"main\"}[60s])/10000)+sum by (threadName)(rate(ndb_ndbinfo_threadstat_user_time{nodeID=\"$nodeID\",threadName=\"main\"}[60s])/10000)",
+          "expr": "sum by (threadName)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=~\".*main.*\"})",
+          "format": "time_series",
           "interval": "",
-          "legendFormat": "{{threadName}} Total",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Send",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum by (threadName)(ndb_ndbinfo_spin_percentage{nodeID=\"$nodeID\",threadName=~\".*main.*\"})",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Spin",
+          "refId": "D"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "main thread stats",
+      "title": "main CPU stats",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "percent",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "hiddenSeries": false,
+      "id": 10,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.0.2",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum by (threadName)(ndb_ndbinfo_sleep_percentage{nodeID=\"$nodeID\",threadName=\"send\"})",
+
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Sleep",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum by (threadName)(ndb_ndbinfo_send_percentage{nodeID=\"$nodeID\",threadName=\"send\"})",
+
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{ threadName }} Send",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "send CPU stats",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -812,8 +1020,8 @@
     ]
   },
   "timezone": "",
-  "title": "Database Thread Activity",
-  "uid": "ndb_threads",
+  "title": "Database CPU Activity",
+  "uid": "ndb_cpu",
   "version": 2,
   "weekStart": ""
 }

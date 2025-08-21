@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 source ./scripts/include.sh
 
-before-start rdrs2
+if [ "$RDRS_MAJOR_VERSION" == 1 ]; then
+  RDRS_BIN=rdrs
+elif [ "$RDRS_MAJOR_VERSION" == 2 ]; then
+  RDRS_BIN=rdrs2
+else
+  exit 1
+fi
+
+# Useful for running unreleased rdrs binaries
+export LD_LIBRARY_PATH="${WORKSPACE}/rondb/lib"
+
+before-start $RDRS_BIN
 (set -x
- $bin/rdrs2  -c ./config_files/rdrs_${NODEINFO_IDX}.json \
-             > ${RUN_DIR}/rdrs/rdrs.log 2>&1 &)
-after-start rdrs2
+ with-restarts $RDRS_BIN \
+ $bin/$RDRS_BIN --config "./config_files/rdrs_${NODEINFO_IDX}.json" \
+             > "${RUN_DIR}/rdrs/rdrs.log" 2>&1 &)
+after-start $RDRS_BIN "${RUN_DIR}/rdrs/rdrs.log"
