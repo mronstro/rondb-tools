@@ -3,12 +3,12 @@
 
 # For RonDB, we need the RonDB version, glibc version and RDRS major version
 latest_rondb = {
-    "rondb_version": "24.10.10",
+    "rondb_version": "24.10.15",
     "glibc_version": "2.28",
     "rdrs_major_version": 2,
 }
 latest_rondb_22 = {
-    "rondb_version": "22.10.13",
+    "rondb_version": "22.10.15",
     "glibc_version": "2.28",
     "rdrs_major_version": 1,
 }
@@ -63,12 +63,12 @@ arm_config_aws = {
 x86_config_aws = {
     "cpu_platform": "x86_64",
     "ndb_mgmd_instance_type": "t3.large",
-    "ndbmtd_instance_type": "t3.2xlarge",
-    "mysqld_instance_type": "t3.large",
-    "rdrs_instance_type": "t3.2xlarge",
+    "ndbmtd_instance_type": "c5.2xlarge",
+    "mysqld_instance_type": "c5.large",
+    "rdrs_instance_type": "c5.2xlarge",
     "prometheus_instance_type": "t3.medium",
     "grafana_instance_type": "t3.medium",
-    "bench_instance_type": "t3.2xlarge",
+    "bench_instance_type": "c5.2xlarge",
 }
 
 # For AWS: Tie together all necessary config variables except RonDB version.
