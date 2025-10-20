@@ -870,10 +870,10 @@ def do_populate(columns, rows, column_types):
         die("NUM_COLUMNS must be in the range 1 - 200")
     if rows < 1 or 1000000000 < rows:
         die("NUM_ROWS must be in the range 1 - 1,000,000,000")
-    if column_types not in ['INT', 'VARCHAR', 'INT_AND_VARCHAR']:
-        die("COLUMN_TYPES must be one of: INT, VARCHAR, INT_AND_VARCHAR")
+    if column_types not in ['INT', 'VARCHAR', 'INT_AND_VARCHAR', 'VARCHAR_250', 'VARBINARY_2000', 'VARBINARY_29500', 'VARCHAR_2000','VARCHAR_29500']:
+        die("COLUMN_TYPES must be one of: INT, VARCHAR, INT_AND_VARCHAR, VARCHAR_250, VARBINARY_2000, VARBINARY_29500,VARCHAR_2000,VARCHAR_29500")
     batch_size = max(math.floor(10000 / columns), 1)
-    column_info = {'INT': 1, 'VARCHAR': 2, 'INT_AND_VARCHAR': 0}[column_types]
+    column_info = {'INT': 1, 'VARCHAR': 2, 'VARCHAR_250': 3, 'VARBINARY_2000': 4, 'VARBINARY_29500': 5, 'VARCHAR_2000': 6, 'VARCHAR_29500': 7, 'INT_AND_VARCHAR': 0}[column_types]
     # Populate table
     run_for_one_node(first('mysqld'), lambda node: [
         ssh(node, f"bash ~/scripts/populate_locust.sh {columns} {rows}" +
